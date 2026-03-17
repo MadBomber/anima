@@ -15,3 +15,8 @@ gem "reek", "~> 6.5"
 gem "standard", "~> 1.3"
 
 gem "webmock", "~> 3.23"
+
+group :development, :test do
+  gem 'debug_me'
+  gem 'aigcm'
+end
