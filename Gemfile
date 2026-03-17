@@ -20,3 +20,8 @@ group :development, :test do
   gem 'debug_me'
   gem 'aigcm'
 end
+
+group :test do
+  gem 'simplecov', require: false
+  gem 'webrick'
+end
