@@ -33,7 +33,7 @@ Gem::Specification.new do |spec|
   spec.add_dependency "foreman", "~> 0.88"
   spec.add_dependency "httparty", "~> 0.24"
   spec.add_dependency "mcp", "~> 0.8"
-  spec.add_dependency "puma", "~> 6.0"
+  spec.add_dependency "falcon", "~> 0.55"
   spec.add_dependency "rails", "~> 8.1"
   spec.add_dependency "ratatui_ruby", "~> 1.4"
   spec.add_dependency "solid_cable", "~> 3.0"

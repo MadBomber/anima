@@ -1,2 +1,2 @@
-web: bin/rails server
+web: falcon serve --bind http://localhost:$PORT
 worker: bin/jobs
