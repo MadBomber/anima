@@ -5,7 +5,7 @@ module Tools
 
   # Manages tool registration and dispatch.
   # Accepts both tool classes (e.g. {Tools::Base} subclasses) and tool
-  # instances (e.g. {Tools::McpTool}) via duck typing. Classes are
+  # instances (e.g. {RubyLLM::MCP::Tool}) via duck typing. Classes are
   # instantiated with the registry's context; instances are used as-is.
   #
   # @example
@@ -23,10 +23,13 @@ module Tools
     end
 
     # Register a tool class or instance.
-    # @param tool [Class<Tools::Base>, #tool_name] tool class or duck-typed instance
+    # Accepts {Tools::Base} subclasses (keyed by +tool_name+) and
+    # {RubyLLM::MCP::Tool} instances (keyed by +name+).
+    # @param tool [Class<Tools::Base>, #name] tool class or duck-typed instance
     # @return [void]
     def register(tool)
-      @tools[tool.tool_name] = tool
+      key = tool.respond_to?(:tool_name) ? tool.tool_name : tool.name
+      @tools[key] = tool
     end
 
     # Returns a hash of instantiated tool instances, keyed by name.

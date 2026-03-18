@@ -8,15 +8,10 @@ SimpleCov.start "rails" do
   # ── Excluded: require live external services or terminal I/O ──────────
   # TUI — terminal rendering, not unit-testable
   add_filter "lib/tui/"
-  # MCP — requires real server connections or spawned processes
-  add_filter "lib/mcp/stdio_transport.rb"
-  add_filter "lib/mcp/health_check.rb"
-  add_filter "lib/mcp/client_manager.rb"
   # Tools that spawn sub-agents (need running LLM loop)
   add_filter "lib/tools/spawn_subagent.rb"
   add_filter "lib/tools/spawn_specialist.rb"
   add_filter "lib/tools/request_feature.rb"
-  add_filter "lib/tools/mcp_tool.rb"
   # Analytical brain runner — drives full LLM loop
   add_filter "lib/analytical_brain/runner.rb"
   # Agent loop — orchestrates full LLM session

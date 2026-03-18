@@ -96,7 +96,7 @@ class Tools::RegistryTest < ActiveSupport::TestCase
   end
 
   test "execute works with duck-typed tool instances" do
-    # McpTool-style instances carry their own state; registry calls them directly.
+    # RubyLLM::MCP::Tool-style instances carry their own state; registry calls them directly.
     instance = Object.new
     instance.define_singleton_method(:tool_name) { "instance_tool" }
     instance.define_singleton_method(:name) { "instance_tool" }
