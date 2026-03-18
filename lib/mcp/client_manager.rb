@@ -24,6 +24,8 @@ module Mcp
     class << self
       # Stops all cached clients and clears the cache. Called at process exit
       # to terminate stdio subprocesses cleanly.
+      #
+      # @return [void]
       def stop_all
         @mutex.synchronize do
           @clients.each_value(&:stop)
@@ -78,6 +80,7 @@ module Mcp
     # @param registry [Tools::Registry] registry to register tools in
     # @param warnings [Array<String>] collects failure messages
     # @yield [server] block that returns a {RubyLLM::MCP::Client} for the server
+    # @return [void]
     def register_transport_tools(servers, registry, warnings)
       servers.each do |server|
         client = yield(server)
@@ -97,6 +100,7 @@ module Mcp
     # @param server_name [String] server name (for log message only)
     # @param client [RubyLLM::MCP::Client] connected MCP client
     # @param registry [Tools::Registry] registry to register tools in
+    # @return [void]
     def register_server_tools(server_name, client, registry)
       count = client.tools.each { |tool| registry.register(tool) }.size
       Rails.logger.info("MCP: registered #{count} tools from #{server_name}")

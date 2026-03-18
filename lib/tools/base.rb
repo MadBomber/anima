@@ -23,12 +23,16 @@ module Tools
 
     # Returns the subclass-defined tool_name, overriding ruby_llm's
     # class-name-derived default.
+    #
+    # @return [String]
     def name
       self.class.tool_name
     end
 
     # Builds the schema hash in the format expected by the Anthropic tools API.
     # Used by Tools::Registry#schemas and for testing.
+    #
+    # @return [Hash] with :name, :description, and :input_schema keys
     def schema
       {name: name, description: description, input_schema: params_schema}
     end
@@ -36,6 +40,8 @@ module Tools
     # Accepts and discards context keywords so that the Registry can pass
     # shared dependencies (e.g. shell_session) to any tool uniformly.
     # Subclasses that need specific context should override with named kwargs.
+    #
+    # @return [void]
     def initialize(**) = nil
   end
 end

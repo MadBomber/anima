@@ -88,12 +88,14 @@ module Session::ContextWindow
 
   private
 
+  # @param include_pending [Boolean]
   # @return [ActiveRecord::Relation]
   def own_event_scope(include_pending)
     scope = events.context_events
     include_pending ? scope : scope.deliverable
   end
 
+  # @param include_pending [Boolean]
   # @return [ActiveRecord::Relation]
   def parent_event_scope(include_pending)
     scope = parent_session.events.context_events.where(created_at: ...created_at)
@@ -121,6 +123,7 @@ module Session::ContextWindow
     selected.reverse
   end
 
+  # @param event [Event]
   # @return [Integer] token cost, using cached count or padded heuristic estimate
   def event_token_cost(event)
     if event.token_count > 0
@@ -132,6 +135,9 @@ module Session::ContextWindow
 
   # Removes trailing tool_call events that lack matching tool_response.
   # Prevents orphaned tool_use blocks at the parent/child viewport boundary.
+  #
+  # @param event_list [Array<Event>] mutated in place
+  # @return [Array<Event>]
   def trim_trailing_tool_calls(event_list)
     event_list.pop while event_list.last&.event_type == "tool_call"
     event_list
@@ -162,6 +168,13 @@ module Session::ContextWindow
   end
 
   # Groups consecutive tool blocks into a single message of the given role.
+  # Anthropic requires all tool_use blocks in one assistant message and all
+  # corresponding tool_result blocks in one user message.
+  #
+  # @param messages [Array<Hash>] accumulator being built
+  # @param role [String] "assistant" or "user"
+  # @param block [Hash] tool_use or tool_result block
+  # @return [void]
   def append_grouped_block(messages, role, block)
     prev = messages.last
     if prev&.dig(:role) == role && prev[:content].is_a?(Array)
@@ -171,6 +184,8 @@ module Session::ContextWindow
     end
   end
 
+  # @param payload [Hash] tool_call event payload
+  # @return [Hash] Anthropic tool_use block
   def tool_use_block(payload)
     {
       type:  "tool_use",
@@ -180,6 +195,8 @@ module Session::ContextWindow
     }
   end
 
+  # @param payload [Hash] tool_response event payload
+  # @return [Hash] Anthropic tool_result block
   def tool_result_block(payload)
     {
       type:        "tool_result",

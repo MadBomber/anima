@@ -39,7 +39,10 @@ module Tools
       },
       required: ["thoughts"]
 
+    # @param thoughts [String] reasoning, analysis, or inner monologue
+    # @param visibility [String] "inner" for silent; "aloud" to narrate for the user
     # @return [String] acknowledgement — the value is in the call, not the result
+    # @return [Hash] with :error key when thoughts is blank
     def execute(thoughts:, visibility: "inner")
       return {error: "Thoughts cannot be blank"} if thoughts.strip.empty?
 

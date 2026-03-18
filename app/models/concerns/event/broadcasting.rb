@@ -45,10 +45,12 @@ module Event::Broadcasting
 
   private
 
+  # @return [void]
   def broadcast_create
     broadcast_event(action: ACTION_CREATE)
   end
 
+  # @return [void]
   def broadcast_update
     broadcast_event(action: ACTION_UPDATE)
   end
@@ -58,6 +60,7 @@ module Event::Broadcasting
   # eviction metadata so clients can remove messages the LLM has forgotten.
   #
   # @param action [String] ACTION_CREATE or ACTION_UPDATE — tells clients how to handle the event
+  # @return [void]
   def broadcast_event(action:)
     return unless session_id
 

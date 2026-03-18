@@ -11,11 +11,17 @@ module Anima
   #
   # Settings are grouped into sections that mirror the TOML file structure:
   #
-  #   [llm]       — Model selection and response limits
-  #   [timeouts]  — Network and execution timeouts (seconds)
-  #   [shell]     — Shell command output limits
-  #   [tools]     — File and web tool limits
-  #   [session]   — Conversation behavior
+  #   [llm]              — Model selection and response limits
+  #   [timeouts]         — Network and execution timeouts (seconds)
+  #   [shell]            — Shell command output limits
+  #   [tools]            — File and web tool limits
+  #   [session]          — Conversation behavior
+  #   [paths]            — Filesystem paths (soul file, etc.)
+  #   [environment]      — Working-directory project file scanning
+  #   [github]           — Feature-request issue configuration
+  #   [analytical_brain] — Analytical brain LLM settings
+  #   [sub_agent]        — Sub-agent context and depth limits
+  #   [workflows]        — Built-in workflow loading control
   #
   # @example Reading a setting
   #   Anima::Settings.model          #=> "claude-sonnet-4-20250514"

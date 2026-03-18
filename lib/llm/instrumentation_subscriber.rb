@@ -19,6 +19,8 @@ module LLM
     # Registers the subscriber with ActiveSupport::Notifications.
     # Called exactly once at boot from config/initializers/event_subscribers.rb.
     # Calling more than once would register duplicate subscriptions and double-log.
+    #
+    # @return [void]
     def self.subscribe!
       ActiveSupport::Notifications.subscribe(CHAT_EVENT, new)
     end
@@ -26,6 +28,7 @@ module LLM
     # Called by ActiveSupport::Notifications for each complete_chat event.
     #
     # @param event [ActiveSupport::Notifications::Event]
+    # @return [void]
     def call(event)
       payload = event.payload
       meta    = payload[:metadata] || {}

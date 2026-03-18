@@ -23,11 +23,14 @@ module Mcp
       new(server).call
     end
 
+    # @param server [Hash] interpolated server config with symbol keys
     def initialize(server)
       @server = server
       @client = nil
     end
 
+    # @return [Hash] +{ status: :connected, tools: Integer }+ or
+    #   +{ status: :failed, error: String }+
     def call
       Timeout.timeout(TIMEOUT) { check }
     rescue Timeout::Error
@@ -42,6 +45,7 @@ module Mcp
 
     private
 
+    # @return [Hash]
     def check
       transport = @server[:transport]
 
@@ -52,6 +56,7 @@ module Mcp
       end
     end
 
+    # @return [Hash]
     def check_http
       @client = RubyLLM::MCP::Client.new(
         name: @server[:name],
@@ -61,6 +66,7 @@ module Mcp
       {status: :connected, tools: @client.tools.size}
     end
 
+    # @return [Hash]
     def check_stdio
       @client = RubyLLM::MCP::Client.new(
         name: @server[:name],

@@ -113,6 +113,10 @@ module LLM
     private
 
     # Builds a seeded RubyLLM::Chat from message history (all but the last message).
+    #
+    # @param messages [Array<Hash>] full message history
+    # @param options [Hash] may include :system for the system prompt
+    # @return [RubyLLM::Chat]
     def build_chat(messages, options)
       chat_opts = {model: model}
       if @provider
@@ -131,6 +135,10 @@ module LLM
 
     # Adds a single message to the chat, wrapping array content in Content::Raw
     # so tool_use / tool_result blocks pass through Anthropic formatting unchanged.
+    #
+    # @param chat [RubyLLM::Chat]
+    # @param msg [Hash] with :role and :content keys
+    # @return [void]
     def seed_message(chat, msg)
       content = if msg[:content].is_a?(Array)
         RubyLLM::Content::Raw.new(msg[:content])
@@ -142,6 +150,11 @@ module LLM
 
     # Instantiates all tools from the registry and registers them with the chat.
     # Each tool instance implements the RubyLLM::Tool interface directly.
+    #
+    # @param chat [RubyLLM::Chat]
+    # @param registry [Tools::Registry]
+    # @param session_id [Integer, nil]
+    # @return [void]
     def register_tools(chat, registry, session_id)
       registry.instances.each_value do |instance|
         chat.with_tool(instance)
@@ -150,30 +163,51 @@ module LLM
 
     # Extracts string content from a message's content field.
     # Array content (e.g. mixed tool_use blocks) is serialised to JSON.
+    #
+    # @param content [Array, String] raw content from a message hash
+    # @return [String]
     def message_content(content)
       content.is_a?(Array) ? content.to_json : content.to_s
     end
 
+    # @param session_id [Integer, nil]
+    # @return [Boolean]
     def interrupted?(session_id)
       return false unless session_id
 
       Session.where(id: session_id, interrupt_requested: true).exists?
     end
 
+    # @param session_id [Integer, nil]
+    # @return [void]
     def clear_interrupt!(session_id)
       return unless session_id
 
       Session.where(id: session_id).update_all(interrupt_requested: false)
     end
 
+    # Serialises a tool result to a string for event emission.
+    # Hash results (e.g. +{error: "..."}+) are JSON-encoded to preserve structure.
+    #
+    # @param result [Hash, Object] raw tool return value
+    # @return [String]
     def format_result(result)
       result.is_a?(Hash) ? result.to_json : result.to_s
     end
 
+    # @param result [Hash, Object] raw tool return value
+    # @return [Boolean] true unless the result is a Hash with an :error key
     def result_success?(result)
       !result.is_a?(Hash) || !result.key?(:error)
     end
 
+    # Emits a skipped tool call/response pair when the user interrupts mid-loop.
+    # The synthetic INTERRUPT_MESSAGE satisfies the Anthropic API requirement that
+    # every tool_use block has a paired tool_result.
+    #
+    # @param tc [RubyLLM::ToolCall] the tool call being skipped
+    # @param session_id [Integer, nil]
+    # @return [void]
     def emit_interrupted_call(tc, session_id)
       Events::Bus.emit(Events::ToolCall.new(
         content: "Skipped #{tc.name} (interrupted)", tool_name: tc.name,
@@ -185,6 +219,9 @@ module LLM
       ))
     end
 
+    # @param level [Symbol] log level (e.g. :debug, :info)
+    # @param message [String]
+    # @return [void]
     def log(level, message)
       @logger&.public_send(level, message)
     end
@@ -198,10 +235,12 @@ module LLM
     # Anthropic API version header value.
     ANTHROPIC_API_VERSION = "2023-06-01"
 
+    # @return [Boolean] true when the configured API key is an OAuth subscription token
     def oauth_token?
       RubyLLM.config.anthropic_api_key.to_s.start_with?(OAUTH_TOKEN_PREFIX)
     end
 
+    # @return [Hash] Authorization and anthropic-beta headers for OAuth requests
     def oauth_headers
       key = RubyLLM.config.anthropic_api_key
       {

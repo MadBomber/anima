@@ -16,6 +16,12 @@ class StaleSessionLockJob < ApplicationJob
   # realistic agent run (api_timeout × max_tool_rounds) with margin.
   STALE_THRESHOLD = 30.minutes
 
+  # Scans for sessions whose processing lock has been held longer than
+  # STALE_THRESHOLD and forcibly clears them. Uses a single atomic
+  # update_all so there is no TOCTOU race with a legitimately running job.
+  # Logs at warn level so ops can distinguish planned releases from crash recovery.
+  #
+  # @return [void]
   def perform
     stale_cutoff = STALE_THRESHOLD.ago
     stale_count = Session.where(processing: true)

@@ -40,7 +40,14 @@ class AgentRequestJob < ApplicationJob
     )
   end
 
+  # Drives the full agent loop for a session: claims the processing lock,
+  # optionally runs a blocking analytical brain pass, loops the agent until
+  # no pending messages remain, then schedules a post-response brain pass.
+  # The ensure block always releases the lock and clears any interrupt flag
+  # regardless of how the job exits.
+  #
   # @param session_id [Integer] ID of the session to process
+  # @return [void]
   def perform(session_id)
     session = Session.find(session_id)
 
@@ -76,6 +83,9 @@ class AgentRequestJob < ApplicationJob
   # Runs the analytical brain synchronously before the main agent loop.
   # Respects the blocking_on_user_message setting and session guards
   # (skips sub-agents and sessions with too few messages).
+  #
+  # @param session [Session] the session being processed
+  # @return [void]
   def run_analytical_brain_blocking(session)
     return unless Anima::Settings.analytical_brain_blocking_on_user_message
     return if session.sub_agent?
@@ -92,12 +102,18 @@ class AgentRequestJob < ApplicationJob
   # Sets the session's processing flag atomically. Returns true if this
   # job claimed the lock, false if another job already holds it.
   # Records locked_at so a watchdog can recover from crashed processes.
+  #
+  # @param session_id [Integer] session to lock
+  # @return [Boolean] true if this job acquired the lock
   def claim_processing(session_id)
     Session.where(id: session_id, processing: false)
       .update_all(processing: true, locked_at: Time.current) == 1
   end
 
   # Clears the processing flag and timestamp so the session can accept new jobs.
+  #
+  # @param session_id [Integer] session to unlock
+  # @return [void]
   def release_processing(session_id)
     Session.where(id: session_id).update_all(processing: false, locked_at: nil)
   end
@@ -105,12 +121,18 @@ class AgentRequestJob < ApplicationJob
   # Safety-net clearing of the interrupt flag. The primary clear happens in
   # {LLM::Client#clear_interrupt!} after handling the interrupt; this ensures
   # the flag is reset even if the job crashes before reaching that code path.
+  #
+  # @param session_id [Integer] session whose interrupt flag to clear
+  # @return [void]
   def clear_interrupt(session_id)
     Session.where(id: session_id, interrupt_requested: true).update_all(interrupt_requested: false)
   end
 
   # Runs a block and swallows any exception, logging it at error level.
   # Used in the ensure block so each cleanup step runs independently.
+  #
+  # @yieldreturn [void]
+  # @return [void]
   def safely
     yield
   rescue => e
@@ -119,6 +141,9 @@ class AgentRequestJob < ApplicationJob
 
   # Emits a system message before each retry so the user sees
   # "retrying..." instead of nothing.
+  #
+  # @param options [Hash] ActiveJob retry options; uses :error and :wait keys
+  # @return [void]
   def retry_job(options = {})
     error = options[:error]
     wait = options[:wait]

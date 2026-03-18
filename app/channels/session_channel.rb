@@ -31,6 +31,7 @@ class SessionChannel < ApplicationCable::Channel
   # the authoritative session ID, followed by view_mode and history.
   #
   # @param params [Hash] optional :session_id (positive integer)
+  # @return [void]
   def subscribed
     @current_session_id = resolve_session_id
     stream_from stream_name
@@ -46,6 +47,7 @@ class SessionChannel < ApplicationCable::Channel
   # Receives messages from clients and broadcasts them to all session subscribers.
   #
   # @param data [Hash] arbitrary message payload
+  # @return [void]
   def receive(data)
     ActionCable.server.broadcast(stream_name, data)
   end
@@ -55,6 +57,7 @@ class SessionChannel < ApplicationCable::Channel
   # is queued as "pending" and picked up after the current loop completes.
   #
   # @param data [Hash] must include "content" with the user's message text
+  # @return [void]
   def speak(data)
     content = data["content"].to_s.strip
     return if content.empty?
@@ -74,6 +77,7 @@ class SessionChannel < ApplicationCable::Channel
   # pending event and broadcasts the recall so all clients remove it.
   #
   # @param data [Hash] must include "event_id" (positive integer)
+  # @return [void]
   def recall_pending(data)
     event_id = data["event_id"].to_i
     return if event_id <= 0
@@ -100,6 +104,7 @@ class SessionChannel < ApplicationCable::Channel
   # No-op if the session isn't currently processing.
   #
   # @param _data [Hash] unused
+  # @return [void]
   def interrupt_execution(_data)
     Session.where(id: @current_session_id, processing: true)
       .update_all(interrupt_requested: true)
@@ -110,6 +115,7 @@ class SessionChannel < ApplicationCable::Channel
   # nested under their parent with name and status information.
   #
   # @param data [Hash] optional "limit" (default 10, max 50)
+  # @return [void]
   def list_sessions(data)
     limit = (data["limit"] || DEFAULT_LIST_LIMIT).to_i.clamp(1, MAX_LIST_LIMIT)
     sessions = Session.root_sessions.recent(limit).includes(:child_sessions)
@@ -122,6 +128,9 @@ class SessionChannel < ApplicationCable::Channel
 
   # Creates a new session and switches the channel stream to it.
   # The client receives a session_changed signal followed by (empty) history.
+  #
+  # @param _data [Hash] unused
+  # @return [void]
   def create_session(_data)
     session = Session.create!
     switch_to_session(session.id)
@@ -131,6 +140,7 @@ class SessionChannel < ApplicationCable::Channel
   # The client receives a session_changed signal followed by chat history.
   #
   # @param data [Hash] must include "session_id" (positive integer)
+  # @return [void]
   def switch_session(data)
     target_id = data["session_id"].to_i
     return transmit_error("Session not found") unless target_id > 0
@@ -145,6 +155,7 @@ class SessionChannel < ApplicationCable::Channel
   # LLM context window — it flows directly from WebSocket to encrypted credentials.
   #
   # @param data [Hash] must include "token" (Anthropic subscription token string)
+  # @return [void]
   def save_token(data)
     token = data["token"].to_s.strip
 
@@ -161,6 +172,7 @@ class SessionChannel < ApplicationCable::Channel
   # All clients on the session receive the mode change and fresh history.
   #
   # @param data [Hash] must include "view_mode" (one of Session::VIEW_MODES)
+  # @return [void]
   def change_view_mode(data)
     mode = data["view_mode"].to_s
     return transmit_error("Invalid view mode") unless Session::VIEW_MODES.include?(mode)
@@ -218,6 +230,9 @@ class SessionChannel < ApplicationCable::Channel
   # Switches the channel to a different session: stops current stream,
   # updates the session reference, starts the new stream, and sends
   # a session_changed signal followed by chat history.
+  #
+  # @param new_id [Integer] ID of the session to switch to
+  # @return [void]
   def switch_to_session(new_id)
     stop_all_streams
     @current_session_id = new_id
@@ -248,6 +263,7 @@ class SessionChannel < ApplicationCable::Channel
   # eviction diffs accurately.
   #
   # @param session [Session] the session whose history to transmit
+  # @return [void]
   def transmit_history(session)
     transmit_system_prompt(session) if session.view_mode == "debug"
 
@@ -424,6 +440,11 @@ class SessionChannel < ApplicationCable::Channel
     entry
   end
 
+  # Broadcasts an error action to the subscribing client.
+  # Keeps error signaling consistent so clients need only check action=="error".
+  #
+  # @param message [String] human-readable error description
+  # @return [void]
   def transmit_error(message)
     transmit({"action" => "error", "message" => message})
   end
