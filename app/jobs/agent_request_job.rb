@@ -89,13 +89,15 @@ class AgentRequestJob < ApplicationJob
 
   # Sets the session's processing flag atomically. Returns true if this
   # job claimed the lock, false if another job already holds it.
+  # Records locked_at so a watchdog can recover from crashed processes.
   def claim_processing(session_id)
-    Session.where(id: session_id, processing: false).update_all(processing: true) == 1
+    Session.where(id: session_id, processing: false)
+      .update_all(processing: true, locked_at: Time.current) == 1
   end
 
-  # Clears the processing flag so the session can accept new jobs.
+  # Clears the processing flag and timestamp so the session can accept new jobs.
   def release_processing(session_id)
-    Session.where(id: session_id).update_all(processing: false)
+    Session.where(id: session_id).update_all(processing: false, locked_at: nil)
   end
 
   # Safety-net clearing of the interrupt flag. The primary clear happens in

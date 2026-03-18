@@ -104,6 +104,9 @@ File.write(test_config_path, <<~TOML)
   blocking_on_user_message = true
   blocking_on_agent_message = false
   event_window = 20
+
+  [sub_agent]
+  parent_context_ratio = 0.5
 TOML
 
 Anima::Settings.config_path = test_config_path

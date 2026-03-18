@@ -177,6 +177,14 @@ module Anima
       # @return [Integer]
       def analytical_brain_event_window = get("analytical_brain", "event_window")
 
+      # ─── Sub-agent ──────────────────────────────────────────────
+      # Maximum fraction of the token budget reserved for parent context
+      # in sub-agent sessions. Prevents inheriting the entire parent
+      # conversation at spawn time, leaving headroom for the sub-agent's
+      # own work. Range: 0.0–1.0.
+      # @return [Float]
+      def sub_agent_parent_context_ratio = get("sub_agent", "parent_context_ratio")
+
       private
 
       # Reads a setting from the config file.

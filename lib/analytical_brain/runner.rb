@@ -143,7 +143,9 @@ module AnalyticalBrain
       [{role: "user", content: content}]
     end
 
-    # @return [Array<Event>] most recent events in chronological order
+    # @return [Array<Event>] most recent events in chronological order.
+    # Uses context_events so tool_call events are visible to the brain —
+    # tool usage patterns inform skill activation decisions.
     def recent_events
       @session.events
         .context_events

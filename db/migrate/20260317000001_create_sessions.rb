@@ -5,7 +5,9 @@ class CreateSessions < ActiveRecord::Migration[8.1]
     create_table :sessions do |t|
       t.string :view_mode, default: "basic", null: false
       t.boolean :processing, default: false, null: false
+      t.datetime :locked_at
       t.boolean :interrupt_requested, default: false, null: false
+      t.boolean :brain_scheduled, default: false, null: false
       t.references :parent_session, foreign_key: {to_table: :sessions}, null: true
       t.text :prompt
       t.json :granted_tools
