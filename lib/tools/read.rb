@@ -9,58 +9,51 @@ module Tools
   # offset value so the agent can page through large files.
   #
   # @example Basic read
-  #   tool.execute("path" => "config/routes.rb")
+  #   tool.execute(path: "config/routes.rb")
   #   # => "Rails.application.routes.draw do\n  ..."
   #
   # @example Paging through a large file
-  #   tool.execute("path" => "large.log", "offset" => 2001, "limit" => 500)
+  #   tool.execute(path: "large.log", offset: 2001, limit: 500)
   #   # => "line 2001 content\n..."
   class Read < Base
     def self.tool_name = "read"
 
-    def self.description = "Read file contents. Returns plain text with smart truncation. Use offset/limit to page through large files."
+    description "Read file contents. Returns plain text with smart truncation. Use offset/limit to page through large files."
 
-    def self.input_schema
-      {
-        type: "object",
-        properties: {
-          path: {type: "string", description: "Absolute or relative file path (relative resolved against working directory)"},
-          offset: {type: "integer", description: "1-indexed line number to start from (default: 1)"},
-          limit: {type: "integer", description: "Maximum lines to read (subject to line and byte caps from config)"}
-        },
-        required: ["path"]
-      }
-    end
+    params type: "object",
+      properties: {
+        path: {type: "string", description: "Absolute or relative file path (relative resolved against working directory)"},
+        offset: {type: "integer", description: "1-indexed line number to start from (default: 1)"},
+        limit: {type: "integer", description: "Maximum lines to read (subject to line and byte caps from config)"}
+      },
+      required: ["path"]
 
     # @param shell_session [ShellSession, nil] provides working directory for resolving relative paths
     def initialize(shell_session: nil, **)
       @working_directory = shell_session&.pwd
     end
 
-    # @param input [Hash<String, Object>] string-keyed hash from the Anthropic API
+    # @param path [String] file path to read
+    # @param offset [Integer, nil] 1-indexed start line (default: 1)
+    # @param limit [Integer, nil] max lines to read
     # @return [String] file contents (possibly truncated with continuation hint)
     # @return [Hash] with :error key on failure
-    def execute(input)
-      path, offset, limit = extract_params(input)
+    def execute(path:, offset: nil, limit: nil)
+      path = path.to_s.strip
       return {error: "Path cannot be blank"} if path.empty?
 
-      path = resolve_path(path)
+      offset = [offset.to_i, 1].max
+      limit = limit ? [limit.to_i, 1].max : Anima::Settings.max_read_lines
 
-      error = validate_file(path)
+      resolved = resolve_path(path)
+
+      error = validate_file(resolved)
       return error if error
 
-      read_file(path, offset, limit)
+      read_file(resolved, offset, limit)
     end
 
     private
-
-    def extract_params(input)
-      path = input["path"].to_s.strip
-      offset = [input["offset"].to_i, 1].max
-      raw_limit = input["limit"]
-      limit = raw_limit ? [raw_limit.to_i, 1].max : Anima::Settings.max_read_lines
-      [path, offset, limit]
-    end
 
     def resolve_path(path)
       if @working_directory

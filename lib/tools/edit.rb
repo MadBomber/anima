@@ -11,58 +11,52 @@ module Tools
   # multiple locations.
   #
   # @example Replacing a method body
-  #   tool.execute("path" => "app.rb",
-  #                "old_text" => "def greet\n  'hi'\nend",
-  #                "new_text" => "def greet\n  'hello'\nend")
+  #   tool.execute(path: "app.rb",
+  #                old_text: "def greet\n  'hi'\nend",
+  #                new_text: "def greet\n  'hello'\nend")
   #   # => "--- app.rb\n+++ app.rb\n@@ -1,3 +1,3 @@\n ..."
   class Edit < Base
     def self.tool_name = "edit"
 
-    def self.description = "Replace exact text in a file. old_text must match exactly one location; " \
-                           "include surrounding lines for uniqueness. Use for surgical edits; " \
-                           "use write for new files or full replacement."
+    description "Replace exact text in a file. old_text must match exactly one location; " \
+                "include surrounding lines for uniqueness. Use for surgical edits; " \
+                "use write for new files or full replacement."
 
-    def self.input_schema
-      {
-        type: "object",
-        properties: {
-          path: {type: "string", description: "Absolute or relative file path (relative resolved against working directory)"},
-          old_text: {type: "string", description: "Exact text to find (must match exactly one location — include surrounding context if needed)"},
-          new_text: {type: "string", description: "Replacement text (empty string to delete)"}
-        },
-        required: %w[path old_text new_text]
-      }
-    end
+    params type: "object",
+      properties: {
+        path: {type: "string", description: "Absolute or relative file path (relative resolved against working directory)"},
+        old_text: {type: "string", description: "Exact text to find (must match exactly one location — include surrounding context if needed)"},
+        new_text: {type: "string", description: "Replacement text (empty string to delete)"}
+      },
+      required: %w[path old_text new_text]
 
     # @param shell_session [ShellSession, nil] provides working directory for resolving relative paths
     def initialize(shell_session: nil, **)
       @working_directory = shell_session&.pwd
     end
 
-    # @param input [Hash<String, Object>] string-keyed hash from the Anthropic API
+    # @param path [String] file path to edit
+    # @param old_text [String] exact text to find and replace
+    # @param new_text [String] replacement text
     # @return [String] unified diff showing the change
     # @return [Hash] with :error key on failure
-    def execute(input)
-      path, old_text, new_text = extract_params(input)
+    def execute(path:, old_text:, new_text:)
+      path = path.to_s.strip
+      old_text = old_text.to_s
+      new_text = new_text.to_s
+
       return {error: "Path cannot be blank"} if path.empty?
       return {error: "old_text cannot be blank"} if old_text.empty?
 
-      path = resolve_path(path)
+      resolved = resolve_path(path)
 
-      error = validate_file(path)
+      error = validate_file(resolved)
       return error if error
 
-      edit_file(path, old_text, new_text)
+      edit_file(resolved, old_text, new_text)
     end
 
     private
-
-    def extract_params(input)
-      path = input["path"].to_s.strip
-      old_text = input["old_text"].to_s
-      new_text = input["new_text"].to_s
-      [path, old_text, new_text]
-    end
 
     def resolve_path(path)
       if @working_directory

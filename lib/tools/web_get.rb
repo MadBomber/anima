@@ -10,23 +10,19 @@ module Tools
   class WebGet < Base
     def self.tool_name = "web_get"
 
-    def self.description = "Fetch content from a URL via HTTP GET and return the response body"
+    description "Fetch content from a URL via HTTP GET and return the response body"
 
-    def self.input_schema
-      {
-        type: "object",
-        properties: {
-          url: {type: "string", description: "The URL to fetch (http or https)"}
-        },
-        required: ["url"]
-      }
-    end
+    params type: "object",
+      properties: {
+        url: {type: "string", description: "The URL to fetch (http or https)"}
+      },
+      required: ["url"]
 
-    # @param input [Hash<String, Object>] string-keyed hash from the Anthropic API
+    # @param url [String] the URL to fetch
     # @return [String] response body (possibly truncated)
     # @return [Hash] with :error key on failure
-    def execute(input)
-      validate_and_fetch(input["url"].to_s)
+    def execute(url:)
+      validate_and_fetch(url.to_s)
     end
 
     private

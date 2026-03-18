@@ -4,7 +4,6 @@ require "test_helper"
 
 class Tools::ReturnResultTest < ActiveSupport::TestCase
   # Minimal subscriber that records emitted event hashes for assertions.
-  # Rails.event passes { name:, payload:, timestamp: } to #emit.
   class RecordingSubscriber
     include Events::Subscriber
 
@@ -41,16 +40,16 @@ class Tools::ReturnResultTest < ActiveSupport::TestCase
     assert_equal "return_result", Tools::ReturnResult.tool_name
   end
 
-  test "execute emits tool_call event to parent session" do
-    @tool.execute("result" => "here is the answer")
+  test "call emits tool_call event to parent session" do
+    @tool.call("result" => "here is the answer")
 
     tool_call = @subscriber.events.find { |e| e[:name]&.include?("tool_call") }
     assert tool_call, "Expected a tool_call event to be emitted"
     assert_equal @parent.id, tool_call.dig(:payload, :session_id)
   end
 
-  test "execute emits tool_response event to parent session with the result" do
-    @tool.execute("result" => "finished output")
+  test "call emits tool_response event to parent session with the result" do
+    @tool.call("result" => "finished output")
 
     tool_response = @subscriber.events.find { |e| e[:name]&.include?("tool_response") }
     assert tool_response, "Expected a tool_response event to be emitted"
@@ -58,31 +57,31 @@ class Tools::ReturnResultTest < ActiveSupport::TestCase
     assert_equal "finished output", tool_response.dig(:payload, :content)
   end
 
-  test "execute returns confirmation message with parent session id" do
-    result = @tool.execute("result" => "done")
+  test "call returns confirmation message with parent session id" do
+    result = @tool.call("result" => "done")
 
     assert_includes result, @parent.id.to_s
   end
 
-  test "execute returns error for blank result" do
-    result = @tool.execute("result" => "")
+  test "call returns error for blank result" do
+    result = @tool.call("result" => "")
 
     assert_kind_of Hash, result
     assert_match(/blank/i, result[:error])
   end
 
-  test "execute returns error when session has no parent" do
+  test "call returns error when session has no parent" do
     orphan = Session.create!
     tool = Tools::ReturnResult.new(session: orphan)
-    result = tool.execute("result" => "orphan result")
+    result = tool.call("result" => "orphan result")
 
     assert_kind_of Hash, result
     assert_match(/no parent session/i, result[:error])
   end
 
-  test "input_schema returns an object schema with result property" do
-    schema = Tools::ReturnResult.input_schema
-    assert_equal "object", schema[:type]
-    assert schema[:properties].key?(:result)
+  test "params_schema returns an object schema with result property" do
+    schema = Tools::ReturnResult.new(session: @child).params_schema
+    assert_equal "object", schema["type"]
+    assert schema["properties"].key?("result")
   end
 end

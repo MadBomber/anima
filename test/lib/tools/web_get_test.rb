@@ -11,64 +11,62 @@ class Tools::WebGetTest < ActiveSupport::TestCase
     assert_equal "web_get", Tools::WebGet.tool_name
   end
 
-  test "execute returns error for blank url" do
-    result = @tool.execute("url" => "")
+  test "call returns error for blank url" do
+    result = @tool.call("url" => "")
 
     assert_kind_of Hash, result
     assert result.key?(:error)
   end
 
-  test "execute returns error for non-http scheme (ftp)" do
-    result = @tool.execute("url" => "ftp://example.com/file.txt")
+  test "call returns error for non-http scheme (ftp)" do
+    result = @tool.call("url" => "ftp://example.com/file.txt")
 
     assert_kind_of Hash, result
     assert_match(/ftp/i, result[:error])
   end
 
-  test "execute returns error for non-http scheme (file)" do
-    result = @tool.execute("url" => "file:///etc/passwd")
+  test "call returns error for non-http scheme (file)" do
+    result = @tool.call("url" => "file:///etc/passwd")
 
     assert_kind_of Hash, result
     assert_match(/file/i, result[:error])
   end
 
-  test "execute returns error for invalid URI" do
-    result = @tool.execute("url" => "not a url !! ##")
+  test "call returns error for invalid URI" do
+    result = @tool.call("url" => "not a url !! ##")
 
     assert_kind_of Hash, result
     assert result.key?(:error)
   end
 
-  test "execute returns error when nil scheme (bare string)" do
-    result = @tool.execute("url" => "justplaintext")
+  test "call returns error when nil scheme (bare string)" do
+    result = @tool.call("url" => "justplaintext")
 
     assert_kind_of Hash, result
     assert result.key?(:error)
   end
 
-  test "execute returns error when connection is refused" do
-    # Port 1 is reserved and will be refused on all platforms
-    result = @tool.execute("url" => "http://127.0.0.1:1/")
+  test "call returns error when connection is refused" do
+    result = @tool.call("url" => "http://127.0.0.1:1/")
 
     assert_kind_of Hash, result
     assert result.key?(:error)
   end
 
-  test "input_schema returns an object schema with url property" do
-    schema = Tools::WebGet.input_schema
-    assert_equal "object", schema[:type]
-    assert schema[:properties].key?(:url)
+  test "params_schema returns an object schema with url property" do
+    schema = Tools::WebGet.new.params_schema
+    assert_equal "object", schema["type"]
+    assert schema["properties"].key?("url")
   end
 
-  test "execute returns error for unresolvable hostname" do
-    # .invalid TLD is guaranteed non-resolving per RFC 2606
-    result = @tool.execute("url" => "http://no-such-host.invalid/")
+  test "call returns error for unresolvable hostname" do
+    result = @tool.call("url" => "http://no-such-host.invalid/")
 
     assert_kind_of Hash, result
     assert result.key?(:error)
   end
 
-  test "execute returns error when request times out" do
+  test "call returns error when request times out" do
     require "socket"
 
     original = Anima::Settings.config_path
@@ -87,7 +85,7 @@ class Tools::WebGetTest < ActiveSupport::TestCase
       end
 
       begin
-        result = @tool.execute("url" => "http://127.0.0.1:#{port}/")
+        result = @tool.call("url" => "http://127.0.0.1:#{port}/")
         assert_kind_of Hash, result
         assert result.key?(:error)
         assert_match(/timed out/i, result[:error])
@@ -102,7 +100,7 @@ class Tools::WebGetTest < ActiveSupport::TestCase
     end
   end
 
-  test "execute truncates response body that exceeds max_web_response_bytes" do
+  test "call truncates response body that exceeds max_web_response_bytes" do
     require "webrick"
 
     port = rand(10000..30000)
@@ -118,7 +116,7 @@ class Tools::WebGetTest < ActiveSupport::TestCase
     sleep 0.05
 
     begin
-      result = @tool.execute("url" => "http://127.0.0.1:#{port}/big")
+      result = @tool.call("url" => "http://127.0.0.1:#{port}/big")
 
       assert_kind_of String, result
       assert_includes result, "[Truncated:"

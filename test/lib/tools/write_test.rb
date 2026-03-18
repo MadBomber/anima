@@ -17,57 +17,57 @@ class Tools::WriteTest < ActiveSupport::TestCase
     assert_equal "write", Tools::Write.tool_name
   end
 
-  test "execute creates a new file with given content" do
+  test "call creates a new file with given content" do
     path = File.join(@tmpdir, "hello.txt")
-    @tool.execute({"path" => path, "content" => "hello world\n"})
+    @tool.call("path" => path, "content" => "hello world\n")
 
     assert File.exist?(path)
     assert_equal "hello world\n", File.read(path)
   end
 
-  test "execute returns confirmation with byte count and path" do
+  test "call returns confirmation with byte count and path" do
     path = File.join(@tmpdir, "hello.txt")
-    result = @tool.execute({"path" => path, "content" => "hello"})
+    result = @tool.call("path" => path, "content" => "hello")
 
     assert_match(/\d+ bytes/, result)
     assert_includes result, path
   end
 
-  test "execute overwrites existing file" do
+  test "call overwrites existing file" do
     path = File.join(@tmpdir, "existing.txt")
     File.write(path, "old content")
 
-    @tool.execute({"path" => path, "content" => "new content"})
+    @tool.call("path" => path, "content" => "new content")
 
     assert_equal "new content", File.read(path)
   end
 
-  test "execute creates intermediate directories automatically" do
+  test "call creates intermediate directories automatically" do
     path = File.join(@tmpdir, "deep/nested/dir/file.txt")
-    @tool.execute({"path" => path, "content" => "nested"})
+    @tool.call("path" => path, "content" => "nested")
 
     assert File.exist?(path)
   end
 
-  test "execute returns error for blank path" do
-    result = @tool.execute({"path" => "", "content" => "content"})
+  test "call returns error for blank path" do
+    result = @tool.call("path" => "", "content" => "content")
     assert_kind_of Hash, result
     assert result.key?(:error)
   end
 
-  test "execute returns error when path is a directory" do
-    result = @tool.execute({"path" => @tmpdir, "content" => "content"})
+  test "call returns error when path is a directory" do
+    result = @tool.call("path" => @tmpdir, "content" => "content")
     assert_kind_of Hash, result
     assert_match(/directory/i, result[:error])
   end
 
-  test "execute returns permission denied when parent directory is not writable" do
+  test "call returns permission denied when parent directory is not writable" do
     subdir = File.join(@tmpdir, "readonly_dir")
     FileUtils.mkdir_p(subdir)
     File.chmod(0555, subdir)
     path = File.join(subdir, "newfile.txt")
 
-    result = @tool.execute({"path" => path, "content" => "content"})
+    result = @tool.call("path" => path, "content" => "content")
 
     assert_kind_of Hash, result
     assert_match(/permission denied/i, result[:error])
@@ -75,36 +75,36 @@ class Tools::WriteTest < ActiveSupport::TestCase
     File.chmod(0755, subdir) rescue nil
   end
 
-  test "execute writes empty content" do
+  test "call writes empty content" do
     path = File.join(@tmpdir, "empty.txt")
-    @tool.execute({"path" => path, "content" => ""})
+    @tool.call("path" => path, "content" => "")
 
     assert File.exist?(path)
     assert_equal "", File.read(path)
   end
 
-  test "execute preserves exact content without normalization" do
+  test "call preserves exact content without normalization" do
     path = File.join(@tmpdir, "exact.txt")
     content = "line1\r\nline2\r\n"
-    @tool.execute({"path" => path, "content" => content})
+    @tool.call("path" => path, "content" => content)
 
     assert_equal content, File.read(path)
   end
 
-  test "input_schema returns an object schema with path and content properties" do
-    schema = Tools::Write.input_schema
-    assert_equal "object", schema[:type]
-    assert schema[:properties].key?(:path)
-    assert schema[:properties].key?(:content)
+  test "params_schema returns an object schema with path and content properties" do
+    schema = Tools::Write.new.params_schema
+    assert_equal "object", schema["type"]
+    assert schema["properties"].key?("path")
+    assert schema["properties"].key?("content")
   end
 
-  test "execute resolves relative path against working directory when shell_session provided" do
-    dir = @tmpdir  # capture as local so the block closes over it, not self
+  test "call resolves relative path against working directory when shell_session provided" do
+    dir = @tmpdir
     shell = Object.new
     shell.define_singleton_method(:pwd) { dir }
     tool = Tools::Write.new(shell_session: shell)
 
-    tool.execute({"path" => "relative.txt", "content" => "relative write"})
+    tool.call("path" => "relative.txt", "content" => "relative write")
 
     expected_path = File.join(dir, "relative.txt")
     assert File.exist?(expected_path)

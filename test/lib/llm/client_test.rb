@@ -28,20 +28,18 @@ class LLM::ClientTest < ActiveSupport::TestCase
   # Cheap tool used to verify tool dispatch works end-to-end.
   class AddTool < Tools::Base
     def self.tool_name = "add"
-    def self.description = "Add two integers and return the sum"
-    def self.input_schema
-      {
-        type: "object",
-        properties: {
-          a: {type: "integer", description: "First number"},
-          b: {type: "integer", description: "Second number"}
-        },
-        required: ["a", "b"]
-      }
-    end
 
-    def execute(input)
-      (input["a"].to_i + input["b"].to_i).to_s
+    description "Add two integers and return the sum"
+
+    params type: "object",
+      properties: {
+        a: {type: "integer", description: "First number"},
+        b: {type: "integer", description: "Second number"}
+      },
+      required: ["a", "b"]
+
+    def execute(a:, b:)
+      (a.to_i + b.to_i).to_s
     end
   end
 
@@ -50,43 +48,6 @@ class LLM::ClientTest < ActiveSupport::TestCase
 
     @registry = Tools::Registry.new
     @client   = LLM::Client.new(model: OLLAMA_MODEL, provider: :ollama)
-  end
-
-  # ── ToolWrapper unit tests (pure, no API calls) ──────────────────────────
-
-  test "ToolWrapper exposes name and description" do
-    wrapper = LLM::Client::ToolWrapper.new(AddTool, @registry, nil)
-    assert_equal "add", wrapper.name
-    assert_equal AddTool.description, wrapper.description
-  end
-
-  test "ToolWrapper#params_schema returns string-keyed hash" do
-    wrapper = LLM::Client::ToolWrapper.new(AddTool, @registry, nil)
-    schema  = wrapper.params_schema
-    assert_equal "object", schema["type"]
-    assert schema["properties"].key?("a")
-    assert schema["properties"].key?("b")
-  end
-
-  test "ToolWrapper#call executes via registry" do
-    @registry.register(AddTool)
-    wrapper = LLM::Client::ToolWrapper.new(AddTool, @registry, nil)
-    result  = wrapper.call("a" => 3, "b" => 7)
-    assert_equal "10", result
-  end
-
-  test "ToolWrapper#call returns error hash on exception" do
-    bad_tool = Class.new(Tools::Base) do
-      def self.tool_name = "boom"
-      def self.description = "Always raises"
-      def self.input_schema = {type: "object", properties: {}, required: []}
-      def execute(_input) = raise "intentional error"
-    end
-    @registry.register(bad_tool)
-    wrapper = LLM::Client::ToolWrapper.new(bad_tool, @registry, nil)
-    result  = wrapper.call({})
-    assert result.is_a?(Hash)
-    assert result.key?(:error)
   end
 
   # ── LLM integration tests ────────────────────────────────────────────────

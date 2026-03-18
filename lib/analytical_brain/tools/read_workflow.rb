@@ -9,32 +9,28 @@ module AnalyticalBrain
     class ReadWorkflow < ::Tools::Base
       def self.tool_name = "read_workflow"
 
-      def self.description = "Read a workflow's full content and activate it on the session. " \
+      description "Read a workflow's full content and activate it on the session. " \
         "Use the content to create appropriate goals with set_goal."
 
-      def self.input_schema
-        {
-          type: "object",
-          properties: {
-            name: {
-              type: "string",
-              description: "Name of the workflow to read (from the available workflows list)"
-            }
-          },
-          required: %w[name]
-        }
-      end
+      params type: "object",
+        properties: {
+          name: {
+            type: "string",
+            description: "Name of the workflow to read (from the available workflows list)"
+          }
+        },
+        required: %w[name]
 
       # @param main_session [Session] the session to activate the workflow on
       def initialize(main_session:, **)
         @main_session = main_session
       end
 
-      # @param input [Hash<String, Object>] with "name" key
+      # @param name [String] workflow name to read and activate
       # @return [String] workflow name, description, and full content
       # @return [Hash] with :error key on validation failure
-      def execute(input)
-        workflow_name = input["name"].to_s.strip
+      def execute(name:)
+        workflow_name = name.to_s.strip
         return {error: "Workflow name cannot be blank"} if workflow_name.empty?
 
         workflow = @main_session.activate_workflow(workflow_name)

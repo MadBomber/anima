@@ -136,11 +136,11 @@ module LLM
       chat.add_message(role: msg[:role].to_sym, content: content)
     end
 
-    # Wraps each tool from the registry as a lightweight ruby_llm-compatible
-    # object and registers it with the chat.
+    # Instantiates all tools from the registry and registers them with the chat.
+    # Each tool instance implements the RubyLLM::Tool interface directly.
     def register_tools(chat, registry, session_id)
-      registry.tools.each_value do |tool|
-        chat.with_tool(ToolWrapper.new(tool, registry, session_id))
+      registry.instances.each_value do |instance|
+        chat.with_tool(instance)
       end
     end
 
@@ -202,41 +202,5 @@ module LLM
 
     # Raised when a user interrupt is detected during tool execution.
     class InterruptRequested < StandardError; end
-
-    # Lightweight ruby_llm-compatible wrapper around a {Tools::Base} subclass
-    # or duck-typed tool instance.
-    #
-    # Exposes the interface ruby_llm needs to format tool schemas for the
-    # Anthropic API (+name+, +description+, +params_schema+, +provider_params+,
-    # +parameters+, +call+) while delegating execution to the {Tools::Registry}.
-    class ToolWrapper
-      attr_reader :name, :description, :provider_params, :parameters
-
-      def initialize(tool, registry, session_id)
-        @_tool = tool
-        @_registry = registry
-        @_session_id = session_id
-        @name = tool.tool_name
-        @description = tool.description
-        @provider_params = {}
-        @parameters = {}
-      end
-
-      # Returns the JSON Schema for this tool's input parameters, with string
-      # keys as required by ruby_llm's Anthropic formatter.
-      def params_schema
-        RubyLLM::Utils.deep_stringify_keys(@_tool.input_schema)
-      end
-
-      # Executes the tool via the registry. Normalises args to string keys so
-      # tool implementations receive the same format they always have.
-      def call(args)
-        input = (args || {}).transform_keys(&:to_s)
-        @_registry.execute(@name, input)
-      rescue => error
-        Rails.logger.error("Tool #{@name} raised #{error.class}: #{error.message}")
-        {error: "#{error.class}: #{error.message}"}
-      end
-    end
   end
 end

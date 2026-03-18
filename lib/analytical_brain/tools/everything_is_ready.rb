@@ -11,16 +11,13 @@ module AnalyticalBrain
     class EverythingIsReady < ::Tools::Base
       def self.tool_name = "everything_is_ready"
 
-      def self.description = "Signal that no changes are needed. " \
+      description "Signal that no changes are needed. " \
         "Call this when the session name and active skills are already appropriate."
 
-      def self.input_schema
-        {type: "object", properties: {}, required: []}
-      end
+      params type: "object", properties: {}, required: []
 
-      # @param _input [Hash] ignored — this tool takes no input
       # @return [String] confirmation message
-      def execute(_input)
+      def execute(**)
         "Acknowledged. No changes needed."
       end
     end
