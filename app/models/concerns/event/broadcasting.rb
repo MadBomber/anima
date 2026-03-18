@@ -6,8 +6,7 @@
 # replace operations.
 #
 # Each broadcast includes the Event's database ID, enabling clients to
-# maintain an ID-indexed store for efficient in-place updates (e.g. when
-# token counts arrive asynchronously from {CountEventTokensJob}).
+# maintain an ID-indexed store for efficient in-place updates.
 #
 # When a new event pushes old events out of the LLM's context window,
 # the broadcast includes `evicted_event_ids` so clients can remove

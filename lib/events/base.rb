@@ -9,13 +9,15 @@ module Events
   #
   # @abstract Subclass and implement {#type}
   class Base
-    attr_reader :content, :session_id, :timestamp
+    attr_reader :content, :session_id, :timestamp, :token_count
 
     # @param content [String] event payload content
     # @param session_id [String, nil] optional session identifier
-    def initialize(content:, session_id: nil)
+    # @param token_count [Integer] exact token count when known (0 = use estimate)
+    def initialize(content:, session_id: nil, token_count: 0)
       @content = content
       @session_id = session_id
+      @token_count = token_count
       @timestamp = Process.clock_gettime(Process::CLOCK_REALTIME, :nanosecond)
     end
 
@@ -32,7 +34,7 @@ module Events
 
     # @return [Hash] serialized event payload
     def to_h
-      {type: type, content: content, session_id: session_id, timestamp: timestamp}
+      {type: type, content: content, session_id: session_id, timestamp: timestamp, token_count: token_count}
     end
   end
 end

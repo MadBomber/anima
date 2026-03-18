@@ -70,8 +70,8 @@ class AgentLoop
   # ends at the interrupted tool result.
   #
   # @return [String, nil] the agent's response text, or nil when interrupted
-  # @raise [Providers::Anthropic::TransientError] on retryable network/server errors
-  # @raise [Providers::Anthropic::AuthenticationError] on auth failures
+  # @raise [RubyLLM::RateLimitError] on rate-limit responses
+  # @raise [RubyLLM::UnauthorizedError] on auth failures
   def run
     @client ||= LLM::Client.new
     @registry ||= build_tool_registry
@@ -88,7 +88,8 @@ class AgentLoop
     response = @client.chat_with_tools(messages, registry: @registry, session_id: @session.id, **options)
     return unless response
 
-    Events::Bus.emit(Events::AgentMessage.new(content: response, session_id: @session.id))
+    token_count = @client.last_tokens&.output.to_i
+    Events::Bus.emit(Events::AgentMessage.new(content: response, session_id: @session.id, token_count: token_count))
     response
   end
 

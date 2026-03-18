@@ -23,6 +23,9 @@ module LLM
     # @return [Integer] maximum tokens in the response
     attr_reader :max_tokens
 
+    # @return [RubyLLM::Tokens, nil] token usage from the most recent {#chat_with_tools} call
+    attr_reader :last_tokens
+
     # @param model [String] model identifier (default from Settings)
     # @param max_tokens [Integer] maximum response tokens (default from Settings)
     # @param logger [Logger, nil] optional logger for tool call tracing
@@ -97,6 +100,7 @@ module LLM
         return nil
       end
 
+      @last_tokens = response.tokens
       response.content.to_s
 
     rescue MaxRoundsExceeded => e
@@ -185,15 +189,24 @@ module LLM
       @logger&.public_send(level, message)
     end
 
+    # Prefix that identifies an Anthropic OAuth (subscription) token.
+    OAUTH_TOKEN_PREFIX = "sk-ant-oat01-"
+
+    # Beta header required for OAuth token requests.
+    OAUTH_BETA = "oauth-2025-04-20"
+
+    # Anthropic API version header value.
+    ANTHROPIC_API_VERSION = "2023-06-01"
+
     def oauth_token?
-      RubyLLM.config.anthropic_api_key.to_s.start_with?(Providers::Anthropic::TOKEN_PREFIX)
+      RubyLLM.config.anthropic_api_key.to_s.start_with?(OAUTH_TOKEN_PREFIX)
     end
 
     def oauth_headers
       key = RubyLLM.config.anthropic_api_key
       {
         "Authorization"  => "Bearer #{key}",
-        "anthropic-beta" => Providers::Anthropic::OAUTH_BETA
+        "anthropic-beta" => OAUTH_BETA
       }
     end
 

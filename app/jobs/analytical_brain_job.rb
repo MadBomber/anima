@@ -14,13 +14,12 @@
 class AnalyticalBrainJob < ApplicationJob
   queue_as :default
 
-  retry_on Providers::Anthropic::TransientError,
-    RubyLLM::RateLimitError, RubyLLM::ServerError,
+  retry_on RubyLLM::RateLimitError, RubyLLM::ServerError,
     RubyLLM::ServiceUnavailableError, RubyLLM::OverloadedError,
     wait: :polynomially_longer, attempts: 3
 
   discard_on ActiveRecord::RecordNotFound
-  discard_on Providers::Anthropic::AuthenticationError, RubyLLM::UnauthorizedError
+  discard_on RubyLLM::UnauthorizedError
 
   # @param session_id [Integer] the main Session to analyze
   def perform(session_id)

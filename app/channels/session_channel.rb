@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "faraday"
+
 # Streams events for a specific session to connected clients.
 # Part of the Brain/TUI separation: the Brain broadcasts events through
 # this channel, and any number of clients (TUI, web, API) can subscribe.
@@ -12,6 +14,12 @@
 class SessionChannel < ApplicationCable::Channel
   DEFAULT_LIST_LIMIT = 10
   MAX_LIST_LIMIT = 50
+
+  # Raised when the submitted token string does not match the expected format.
+  class TokenFormatError < StandardError; end
+
+  # Raised when the Anthropic API rejects the submitted token.
+  class AuthenticationError < StandardError; end
 
   # Subscribes the client to the session-specific stream.
   # When a valid session_id is provided, subscribes to that session.
@@ -140,12 +148,12 @@ class SessionChannel < ApplicationCable::Channel
   def save_token(data)
     token = data["token"].to_s.strip
 
-    Providers::Anthropic.validate_token_format!(token)
-    Providers::Anthropic.validate_token_api!(token)
+    validate_token_format!(token)
+    validate_token_api!(token)
     write_anthropic_token(token)
 
     transmit({"action" => "token_saved"})
-  rescue Providers::Anthropic::TokenFormatError, Providers::Anthropic::AuthenticationError => error
+  rescue TokenFormatError, AuthenticationError => error
     transmit({"action" => "token_error", "message" => error.message})
   end
 
@@ -335,6 +343,41 @@ class SessionChannel < ApplicationCable::Channel
         "debug" => {role: :system_prompt, content: prompt, tokens: tokens, estimated: true}
       }
     }
+  end
+
+  # Validates the token string format before making any API call.
+  # @raise [TokenFormatError] when the token does not start with the OAuth prefix
+  def validate_token_format!(token)
+    unless token.start_with?(LLM::Client::OAUTH_TOKEN_PREFIX)
+      raise TokenFormatError,
+        "Token must start with '#{LLM::Client::OAUTH_TOKEN_PREFIX}'. Got: '#{token[0..12]}...'"
+    end
+  end
+
+  # Validates the token against the live Anthropic API via a direct HTTP call.
+  # Uses Faraday directly to avoid mutating the global RubyLLM config.
+  # @raise [AuthenticationError] when the API rejects the token
+  def validate_token_api!(token)
+    headers = if token.start_with?(LLM::Client::OAUTH_TOKEN_PREFIX)
+      {
+        "Authorization"     => "Bearer #{token}",
+        "anthropic-version" => LLM::Client::ANTHROPIC_API_VERSION,
+        "anthropic-beta"    => LLM::Client::OAUTH_BETA,
+        "content-type"      => "application/json"
+      }
+    else
+      {
+        "x-api-key"         => token,
+        "anthropic-version" => LLM::Client::ANTHROPIC_API_VERSION,
+        "content-type"      => "application/json"
+      }
+    end
+
+    body = {model: Anima::Settings.model, messages: [{role: "user", content: "Hi"}], max_tokens: 1}.to_json
+    conn = Faraday.new("https://api.anthropic.com") { |f| f.response :json }
+    response = conn.post("/v1/messages", body, headers)
+
+    raise AuthenticationError, "Token rejected by Anthropic API (#{response.status})" if [401, 403].include?(response.status)
   end
 
   # Merges the Anthropic subscription token into encrypted credentials,

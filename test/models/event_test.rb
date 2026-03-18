@@ -169,17 +169,4 @@ class EventTest < ActiveSupport::TestCase
     assert event.estimate_tokens >= 1
   end
 
-  # ─── Callbacks ───────────────────────────────────────────────────────────
-
-  test "enqueues CountEventTokensJob after creating an LLM event" do
-    assert_enqueued_with(job: CountEventTokensJob) do
-      @session.events.create!(event_type: "user_message", payload: {content: "hi"}, timestamp: 1)
-    end
-  end
-
-  test "does not enqueue CountEventTokensJob for non-LLM events" do
-    assert_no_enqueued_jobs(only: CountEventTokensJob) do
-      @session.events.create!(event_type: "system_message", payload: {content: "boot"}, timestamp: 1)
-    end
-  end
 end

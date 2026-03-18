@@ -44,6 +44,7 @@ module Events
             payload: payload,
             status: payload[:status],
             tool_use_id: payload[:tool_use_id],
+            token_count: payload[:token_count].to_i,
             timestamp: payload[:timestamp] || Process.clock_gettime(Process::CLOCK_REALTIME, :nanosecond)
           )
         end
