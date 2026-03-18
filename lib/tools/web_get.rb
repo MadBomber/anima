@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "httparty"
+require "net/http"
 
 module Tools
   # Fetches content from a URL via HTTP GET. Returns the response body
@@ -10,36 +10,37 @@ module Tools
   class WebGet < Base
     def self.tool_name = "web_get"
 
-    def self.description = "Fetch content from a URL via HTTP GET and return the response body"
+    description "Fetch content from a URL via HTTP GET and return the response body"
 
-    def self.input_schema
-      {
-        type: "object",
-        properties: {
-          url: {type: "string", description: "The URL to fetch (http or https)"}
-        },
-        required: ["url"]
-      }
-    end
+    params type: "object",
+      properties: {
+        url: {type: "string", description: "The URL to fetch (http or https)"}
+      },
+      required: ["url"]
 
-    # @param input [Hash<String, Object>] string-keyed hash from the Anthropic API
+    # @param url [String] the URL to fetch
     # @return [String] response body (possibly truncated)
     # @return [Hash] with :error key on failure
-    def execute(input)
-      validate_and_fetch(input["url"].to_s)
+    def execute(url:)
+      validate_and_fetch(url.to_s)
     end
 
     private
 
     def validate_and_fetch(url)
       timeout = Anima::Settings.web_request_timeout
-      scheme = URI.parse(url).scheme
+      uri = URI.parse(url)
 
-      unless %w[http https].include?(scheme)
-        return {error: "Only http and https URLs are supported, got: #{scheme.inspect}"}
+      unless %w[http https].include?(uri.scheme)
+        return {error: "Only http and https URLs are supported, got: #{uri.scheme.inspect}"}
       end
 
-      truncate_body(HTTParty.get(url, timeout: timeout, follow_redirects: false).body.to_s)
+      http = Net::HTTP.new(uri.host, uri.port)
+      http.use_ssl = (uri.scheme == "https")
+      http.open_timeout = timeout
+      http.read_timeout = timeout
+      response = http.request(Net::HTTP::Get.new(uri.request_uri))
+      truncate_body(response.body.to_s)
     rescue URI::InvalidURIError => error
       {error: "Invalid URL: #{error.message}"}
     rescue Net::OpenTimeout, Net::ReadTimeout

@@ -1,13 +1,14 @@
 # frozen_string_literal: true
 
 require "timeout"
+require "ruby_llm/mcp"
 
 module Mcp
   # Probes an MCP server to verify connectivity and count available tools.
   # Used by the CLI +list+ command to show server health status.
   #
   # @example
-  #   result = Mcp::HealthCheck.call(name: "sentry", url: "https://mcp.sentry.dev/mcp", headers: {})
+  #   result = Mcp::HealthCheck.call(name: "sentry", url: "https://mcp.sentry.dev/mcp", transport: "http")
   #   result #=> { status: :connected, tools: 5 }
   class HealthCheck
     # Health check probe timeout in seconds. Balances responsiveness
@@ -22,11 +23,14 @@ module Mcp
       new(server).call
     end
 
+    # @param server [Hash] interpolated server config with symbol keys
     def initialize(server)
       @server = server
-      @stdio_transport = nil
+      @client = nil
     end
 
+    # @return [Hash] +{ status: :connected, tools: Integer }+ or
+    #   +{ status: :failed, error: String }+
     def call
       Timeout.timeout(TIMEOUT) { check }
     rescue Timeout::Error
@@ -35,10 +39,13 @@ module Mcp
       {status: :failed, error: "missing credential #{key_error.message}"}
     rescue => error
       {status: :failed, error: error.message}
+    ensure
+      @client&.stop
     end
 
     private
 
+    # @return [Hash]
     def check
       transport = @server[:transport]
 
@@ -49,29 +56,28 @@ module Mcp
       end
     end
 
+    # @return [Hash]
     def check_http
-      require "mcp"
-
-      transport = MCP::Client::HTTP.new(url: @server[:url], headers: @server[:headers] || {})
-      client = MCP::Client.new(transport: transport)
-      tool_count = client.tools.size
-      {status: :connected, tools: tool_count}
+      @client = RubyLLM::MCP::Client.new(
+        name: @server[:name],
+        transport_type: :sse,
+        config: {url: @server[:url], headers: @server[:headers] || {}}
+      )
+      {status: :connected, tools: @client.tools.size}
     end
 
+    # @return [Hash]
     def check_stdio
-      require "mcp"
-      require_relative "stdio_transport"
-
-      @stdio_transport = StdioTransport.new(
-        command: @server[:command],
-        args: @server[:args] || [],
-        env: @server[:env] || {}
+      @client = RubyLLM::MCP::Client.new(
+        name: @server[:name],
+        transport_type: :stdio,
+        config: {
+          command: @server[:command],
+          args: @server[:args] || [],
+          env: @server[:env] || {}
+        }
       )
-      client = MCP::Client.new(transport: @stdio_transport)
-      tool_count = client.tools.size
-      {status: :connected, tools: tool_count}
-    ensure
-      @stdio_transport&.shutdown
+      {status: :connected, tools: @client.tools.size}
     end
   end
 end

@@ -1,0 +1,77 @@
+/* Anima Documentation Custom Styles */
+
+/* ── Brand colors ─────────────────────────────────────── */
+:root {
+  --anima-purple: #6750a4;
+  --anima-amber: #f59e0b;
+  --anima-dark-bg: #1a1a2e;
+}
+
+/* ── Hero section on index page ───────────────────────── */
+.anima-hero {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  border-radius: 0.5rem;
+  padding: 2.5rem 2rem;
+  margin-bottom: 2rem;
+  border-left: 4px solid var(--anima-amber);
+}
+
+.anima-hero h1 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  color: #ffffff;
+}
+
+.anima-hero .tagline {
+  font-size: 1.15rem;
+  color: #a0aec0;
+  margin-bottom: 0;
+}
+
+/* ── Status badges ────────────────────────────────────── */
+.badge-implemented {
+  background-color: #059669;
+  color: white;
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.badge-planned {
+  background-color: #6b7280;
+  color: white;
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ── Architecture tree blocks ─────────────────────────── */
+.arch-tree {
+  font-family: var(--md-code-font-family);
+  background: var(--md-code-bg-color);
+  border-radius: 0.3rem;
+  padding: 1rem 1.25rem;
+  border-left: 3px solid var(--anima-purple);
+}
+
+/* ── Callout for "not yet implemented" features ──────── */
+.admonition.planned {
+  border-color: #6b7280;
+}
+
+.admonition.planned > .admonition-title {
+  background-color: rgba(107, 114, 128, 0.1);
+}
+
+.admonition.planned > .admonition-title::before {
+  background-color: #6b7280;
+  -webkit-mask-image: var(--md-admonition-icon--abstract);
+          mask-image: var(--md-admonition-icon--abstract);
+}

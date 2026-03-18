@@ -6,8 +6,7 @@
 # replace operations.
 #
 # Each broadcast includes the Event's database ID, enabling clients to
-# maintain an ID-indexed store for efficient in-place updates (e.g. when
-# token counts arrive asynchronously from {CountEventTokensJob}).
+# maintain an ID-indexed store for efficient in-place updates.
 #
 # When a new event pushes old events out of the LLM's context window,
 # the broadcast includes `evicted_event_ids` so clients can remove
@@ -46,10 +45,12 @@ module Event::Broadcasting
 
   private
 
+  # @return [void]
   def broadcast_create
     broadcast_event(action: ACTION_CREATE)
   end
 
+  # @return [void]
   def broadcast_update
     broadcast_event(action: ACTION_UPDATE)
   end
@@ -59,6 +60,7 @@ module Event::Broadcasting
   # eviction metadata so clients can remove messages the LLM has forgotten.
   #
   # @param action [String] ACTION_CREATE or ACTION_UPDATE — tells clients how to handle the event
+  # @return [void]
   def broadcast_event(action:)
     return unless session_id
 

@@ -19,6 +19,10 @@ module Events
   #     end
   #   end
   module Subscriber
+    # Called by the event bus for each notification.
+    #
+    # @param event [Hash] notification with :name, :payload (the event's to_h), and :timestamp
+    # @return [void]
     def emit(event)
       raise NotImplementedError, "#{self.class} must implement #emit"
     end

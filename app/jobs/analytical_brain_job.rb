@@ -14,14 +14,20 @@
 class AnalyticalBrainJob < ApplicationJob
   queue_as :default
 
-  retry_on Providers::Anthropic::TransientError,
+  retry_on RubyLLM::RateLimitError, RubyLLM::ServerError,
+    RubyLLM::ServiceUnavailableError, RubyLLM::OverloadedError,
     wait: :polynomially_longer, attempts: 3
 
   discard_on ActiveRecord::RecordNotFound
-  discard_on Providers::Anthropic::AuthenticationError
+  discard_on RubyLLM::UnauthorizedError
 
   # @param session_id [Integer] the main Session to analyze
   def perform(session_id)
+    # Release the scheduling slot immediately so new brain jobs can be enqueued
+    # while this one runs. Must happen before find so the slot is open even if
+    # the session no longer exists (RecordNotFound → discard_on handles that).
+    Session.where(id: session_id).update_all(brain_scheduled: false)
+
     brain_log = AnalyticalBrain.logger
     session = Session.find(session_id)
     brain_log.info("async job started for session=#{session_id}")

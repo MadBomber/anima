@@ -8,32 +8,28 @@ module AnalyticalBrain
     class ActivateSkill < ::Tools::Base
       def self.tool_name = "activate_skill"
 
-      def self.description = "Activate a domain knowledge skill on the main session. " \
+      description "Activate a domain knowledge skill on the main session. " \
         "The skill's content will be injected into the agent's system prompt."
 
-      def self.input_schema
-        {
-          type: "object",
-          properties: {
-            name: {
-              type: "string",
-              description: "Name of the skill to activate (from the available skills list)"
-            }
-          },
-          required: %w[name]
-        }
-      end
+      params type: "object",
+        properties: {
+          name: {
+            type: "string",
+            description: "Name of the skill to activate (from the available skills list)"
+          }
+        },
+        required: %w[name]
 
       # @param main_session [Session] the session to activate the skill on
       def initialize(main_session:, **)
         @main_session = main_session
       end
 
-      # @param input [Hash<String, Object>] with "name" key
+      # @param name [String] skill name to activate
       # @return [String] confirmation message with skill description
       # @return [Hash] with :error key on validation failure
-      def execute(input)
-        skill_name = input["name"].to_s.strip
+      def execute(name:)
+        skill_name = name.to_s.strip
         return {error: "Skill name cannot be blank"} if skill_name.empty?
 
         skill = @main_session.activate_skill(skill_name)

@@ -20,17 +20,20 @@ module Events
 
     class << self
       # @param event [Events::Base] the event to broadcast
+      # @return [void]
       def emit(event)
         Rails.event.notify(event.event_name, event.to_h)
       end
 
       # @param subscriber [#emit] object implementing the Subscriber interface
       # @param filter [Proc] optional filter block passed to Rails.event
+      # @return [void]
       def subscribe(subscriber, &filter)
         Rails.event.subscribe(subscriber, &filter)
       end
 
       # @param subscriber [#emit] previously subscribed object
+      # @return [void]
       def unsubscribe(subscriber)
         Rails.event.unsubscribe(subscriber)
       end

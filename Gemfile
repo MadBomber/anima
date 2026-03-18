@@ -3,15 +3,18 @@
 source "https://rubygems.org"
 
 # Specify your gem's dependencies in anima-core.gemspec
-gemspec
+gemspec  #
 
-gem "irb"
-gem "rake", "~> 13.0"
+group :development, :test do
+  gem "aigcm"     # AI-powered git commit message generator
+  gem "debug_me"  # A tool to print the labeled value of variables.
+  gem "irb"       # Interactive Ruby command-line tool for REPL (Read Eval Print Loop).
+  gem "rake"      # Rake is a Make-like program implemented in Ruby
+  gem "reek"      # Code smell detector for Ruby
+  gem "standard"  # Ruby Style Guide, with linter & automatic code fixer
+end
 
-gem "rspec", "~> 3.0"
-gem "rspec-rails", "~> 7.0"
-
-gem "reek", "~> 6.5"
-gem "standard", "~> 1.3"
-
-gem "webmock", "~> 3.23"
+group :test do
+  gem "simplecov", require: false  # Code coverage for Ruby
+  gem "webrick"                    # HTTP server toolkit
+end

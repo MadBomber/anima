@@ -15,37 +15,33 @@ module AnalyticalBrain
     class UpdateGoal < ::Tools::Base
       def self.tool_name = "update_goal"
 
-      def self.description = "Update a goal's description. " \
+      description "Update a goal's description. " \
         "Use this to refine a goal as understanding evolves."
 
-      def self.input_schema
-        {
-          type: "object",
-          properties: {
-            goal_id: {
-              type: "integer",
-              description: "ID of the goal to update"
-            },
-            description: {
-              type: "string",
-              description: "New description for the goal (1-2 sentences)"
-            }
+      params type: "object",
+        properties: {
+          goal_id: {
+            type: "integer",
+            description: "ID of the goal to update"
           },
-          required: %w[goal_id description]
-        }
-      end
+          description: {
+            type: "string",
+            description: "New description for the goal (1-2 sentences)"
+          }
+        },
+        required: %w[goal_id description]
 
       # @param main_session [Session] the session owning the goal
       def initialize(main_session:, **)
         @main_session = main_session
       end
 
-      # @param input [Hash<String, Object>] with "goal_id" and "description"
+      # @param goal_id [Integer] ID of the goal to update
+      # @param description [String] new description
       # @return [String] confirmation message
       # @return [Hash] with :error key on failure
-      def execute(input)
-        goal_id = input["goal_id"]
-        description = input["description"].to_s.strip
+      def execute(goal_id:, description:)
+        description = description.to_s.strip
         return {error: "Description cannot be blank"} if description.empty?
 
         goal = @main_session.goals.find_by(id: goal_id)

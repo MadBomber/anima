@@ -8,55 +8,46 @@ module Tools
   # handling. Full replacement only; no append or merge.
   #
   # @example Creating a new file
-  #   tool.execute("path" => "config/new.yml", "content" => "key: value\n")
+  #   tool.execute(path: "config/new.yml", content: "key: value\n")
   #   # => "Wrote 11 bytes to /home/user/project/config/new.yml"
   #
   # @example Overwriting an existing file
-  #   tool.execute("path" => "README.md", "content" => "# Title\n")
+  #   tool.execute(path: "README.md", content: "# Title\n")
   #   # => "Wrote 9 bytes to /home/user/project/README.md"
   class Write < Base
     def self.tool_name = "write"
 
-    def self.description = "Create or overwrite a file. Creates intermediate directories automatically. Use for new files or full replacement."
+    description "Create or overwrite a file. Creates intermediate directories automatically. Use for new files or full replacement."
 
-    def self.input_schema
-      {
-        type: "object",
-        properties: {
-          path: {type: "string", description: "Absolute or relative file path (relative resolved against working directory)"},
-          content: {type: "string", description: "Full file content to write"}
-        },
-        required: %w[path content]
-      }
-    end
+    params type: "object",
+      properties: {
+        path: {type: "string", description: "Absolute or relative file path (relative resolved against working directory)"},
+        content: {type: "string", description: "Full file content to write"}
+      },
+      required: %w[path content]
 
     # @param shell_session [ShellSession, nil] provides working directory for resolving relative paths
     def initialize(shell_session: nil, **)
       @working_directory = shell_session&.pwd
     end
 
-    # @param input [Hash<String, Object>] string-keyed hash from the Anthropic API
+    # @param path [String] file path to write
+    # @param content [String] full file content
     # @return [String] confirmation with bytes written and resolved path
     # @return [Hash] with :error key on failure
-    def execute(input)
-      path, content = extract_params(input)
+    def execute(path:, content:)
+      path = path.to_s.strip
       return {error: "Path cannot be blank"} if path.empty?
 
-      path = resolve_path(path)
+      resolved = resolve_path(path)
 
-      error = validate_target(path)
+      error = validate_target(resolved)
       return error if error
 
-      write_file(path, content)
+      write_file(resolved, content.to_s)
     end
 
     private
-
-    def extract_params(input)
-      path = input["path"].to_s.strip
-      content = input["content"].to_s
-      [path, content]
-    end
 
     def resolve_path(path)
       if @working_directory

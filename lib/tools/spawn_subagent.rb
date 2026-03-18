@@ -14,35 +14,29 @@ module Tools
 
     def self.tool_name = "spawn_subagent"
 
-    def self.description
-      "Spawn a generic sub-agent to work on a task autonomously. " \
-        "The sub-agent inherits your conversation context, works independently, " \
-        "and returns results as a tool response when done."
-    end
+    description "Spawn a generic sub-agent to work on a task autonomously. " \
+      "The sub-agent inherits your conversation context, works independently, " \
+      "and returns results as a tool response when done."
 
-    def self.input_schema
-      {
-        type: "object",
-        properties: {
-          task: {
-            type: "string",
-            description: "What the sub-agent should do (emitted as its first user message)"
-          },
-          expected_output: {
-            type: "string",
-            description: "Description of the expected deliverable"
-          },
-          tools: {
-            type: "array",
-            items: {type: "string"},
-            description: "Tool names to grant the sub-agent. " \
-              "Omit for all standard tools. Empty array for pure reasoning (return_result only). " \
-              "Valid tools: #{AgentLoop::STANDARD_TOOLS_BY_NAME.keys.join(", ")}"
-          }
+    params type: "object",
+      properties: {
+        task: {
+          type: "string",
+          description: "What the sub-agent should do (emitted as its first user message)"
         },
-        required: %w[task expected_output]
-      }
-    end
+        expected_output: {
+          type: "string",
+          description: "Description of the expected deliverable"
+        },
+        tools: {
+          type: "array",
+          items: {type: "string"},
+          description: "Tool names to grant the sub-agent. " \
+            "Omit for all standard tools. Empty array for pure reasoning (return_result only). " \
+            "Valid tools: #{AgentLoop::STANDARD_TOOLS_BY_NAME.keys.join(", ")}"
+        }
+      },
+      required: %w[task expected_output]
 
     # @param session [Session] the parent session spawning the sub-agent
     def initialize(session:, **)
@@ -52,22 +46,27 @@ module Tools
     # Creates a child session, emits the task as a user message, and
     # queues background processing. Returns immediately (non-blocking).
     #
-    # @param input [Hash<String, Object>] with "task", "expected_output", and optional "tools"
+    # @param task [String] what the sub-agent should do
+    # @param expected_output [String] description of the expected deliverable
+    # @param tools [Array<String>, nil] tool names to grant (nil = all standard tools)
     # @return [String] confirmation with child session ID
     # @return [Hash{Symbol => String}] with :error key on validation failure
-    def execute(input)
-      task = input["task"].to_s.strip
-      expected_output = input["expected_output"].to_s.strip
+    def execute(task:, expected_output:, tools: nil)
+      error = check_spawn_depth
+      return error if error
+
+      task = task.to_s.strip
+      expected_output = expected_output.to_s.strip
 
       return {error: "Task cannot be blank"} if task.empty?
       return {error: "Expected output cannot be blank"} if expected_output.empty?
 
-      tools = normalize_tools(input["tools"])
+      normalized = normalize_tools(tools)
 
-      error = validate_tools(tools)
+      error = validate_tools(normalized)
       return error if error
 
-      child = spawn_child(task, expected_output, tools)
+      child = spawn_child(task, expected_output, normalized)
       "Sub-agent spawned (session #{child.id}). Result will arrive as a tool response."
     end
 

@@ -11,11 +11,17 @@ module Anima
   #
   # Settings are grouped into sections that mirror the TOML file structure:
   #
-  #   [llm]       — Model selection and response limits
-  #   [timeouts]  — Network and execution timeouts (seconds)
-  #   [shell]     — Shell command output limits
-  #   [tools]     — File and web tool limits
-  #   [session]   — Conversation behavior
+  #   [llm]              — Model selection and response limits
+  #   [timeouts]         — Network and execution timeouts (seconds)
+  #   [shell]            — Shell command output limits
+  #   [tools]            — File and web tool limits
+  #   [session]          — Conversation behavior
+  #   [paths]            — Filesystem paths (soul file, etc.)
+  #   [environment]      — Working-directory project file scanning
+  #   [github]           — Feature-request issue configuration
+  #   [analytical_brain] — Analytical brain LLM settings
+  #   [sub_agent]        — Sub-agent context and depth limits
+  #   [workflows]        — Built-in workflow loading control
   #
   # @example Reading a setting
   #   Anima::Settings.model          #=> "claude-sonnet-4-20250514"
@@ -177,6 +183,24 @@ module Anima
       # @return [Integer]
       def analytical_brain_event_window = get("analytical_brain", "event_window")
 
+      # ─── Sub-agent ──────────────────────────────────────────────
+      # Maximum fraction of the token budget reserved for parent context
+      # in sub-agent sessions. Prevents inheriting the entire parent
+      # conversation at spawn time, leaving headroom for the sub-agent's
+      # own work. Range: 0.0–1.0.
+      # @return [Float]
+      def sub_agent_parent_context_ratio = get("sub_agent", "parent_context_ratio")
+
+      # ─── Workflows ──────────────────────────────────────────────
+
+      # Whether to load the built-in workflows shipped with Anima.
+      # Set to +false+ in ~/.anima/config.toml to suppress built-in
+      # workflows and rely solely on ~/.anima/workflows/.
+      # @return [Boolean]
+      def load_builtin_workflows
+        config.dig("workflows", "load_builtin") != false
+      end
+
       private
 
       # Reads a setting from the config file.
@@ -214,12 +238,60 @@ module Anima
 
           current_mtime = File.mtime(path)
           if current_mtime != @config_mtime
+            parsed = TomlRB.load_file(path)
+            validate_config!(parsed, path)
             @config_mtime = current_mtime
-            @config_cache = TomlRB.load_file(path)
+            @config_cache = parsed
           end
 
           @config_cache
         end
+      end
+
+      # Validates the parsed config hash for obviously wrong values.
+      # Raises {MissingSettingError} with a human-readable message so the user
+      # knows exactly what to fix before the value causes a cryptic runtime error.
+      #
+      # @param cfg [Hash] parsed TOML
+      # @param path [String] config file path (for error messages)
+      # @raise [MissingSettingError]
+      def validate_config!(cfg, path)
+        errors = []
+
+        # Positive integers
+        {
+          %w[llm max_tokens]                     => "must be a positive integer",
+          %w[llm token_budget]                   => "must be a positive integer",
+          %w[llm max_tool_rounds]                => "must be a positive integer",
+          %w[timeouts api]                       => "must be a positive integer (seconds)",
+          %w[timeouts command]                   => "must be a positive integer (seconds)",
+          %w[analytical_brain max_tokens]        => "must be a positive integer",
+          %w[analytical_brain event_window]      => "must be a positive integer"
+        }.each do |(section, key), hint|
+          val = cfg.dig(section, key)
+          errors << "[#{section}] #{key} #{hint} (got: #{val.inspect})" unless val.is_a?(Integer) && val > 0
+        end
+
+        # Non-empty strings
+        {
+          %w[llm model]      => "must be a non-empty string",
+          %w[llm fast_model] => "must be a non-empty string"
+        }.each do |(section, key), hint|
+          val = cfg.dig(section, key)
+          errors << "[#{section}] #{key} #{hint} (got: #{val.inspect})" unless val.is_a?(String) && !val.strip.empty?
+        end
+
+        # Ratio: 0.0 < value <= 1.0
+        ratio = cfg.dig("sub_agent", "parent_context_ratio")
+        unless ratio.is_a?(Numeric) && ratio > 0 && ratio <= 1
+          errors << "[sub_agent] parent_context_ratio must be between 0 (exclusive) and 1 (inclusive) (got: #{ratio.inspect})"
+        end
+
+        return if errors.empty?
+
+        raise MissingSettingError,
+          "Invalid config at #{path}:\n#{errors.map { |e| "  • #{e}" }.join("\n")}\n" \
+          "Run `anima update` or edit the file to fix these values."
       end
     end
   end

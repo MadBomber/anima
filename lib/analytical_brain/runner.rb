@@ -103,12 +103,14 @@ module AnalyticalBrain
       log.debug("system prompt:\n#{system}")
       log.debug("user message:\n#{messages.first[:content]}")
 
-      result = @client.chat_with_tools(
-        messages,
-        registry: build_registry,
-        session_id: nil,
-        system: system
-      )
+      result = RubyLLM::Instrumentation.with(session_id: @session.id, context: "analytical_brain") do
+        @client.chat_with_tools(
+          messages,
+          registry: build_registry,
+          session_id: nil,
+          system: system
+        )
+      end
 
       log.info("session=#{sid} — done: #{result.to_s.truncate(200)}")
       result
@@ -141,7 +143,9 @@ module AnalyticalBrain
       [{role: "user", content: content}]
     end
 
-    # @return [Array<Event>] most recent events in chronological order
+    # @return [Array<Event>] most recent events in chronological order.
+    # Uses context_events so tool_call events are visible to the brain —
+    # tool usage patterns inform skill activation decisions.
     def recent_events
       @session.events
         .context_events

@@ -1,257 +1,258 @@
 # frozen_string_literal: true
 
 module LLM
-  # Convenience layer over {Providers::Anthropic} for sending messages
-  # and handling tool execution loops. Supports both simple text chat
-  # and multi-turn tool calling via the Anthropic tool use protocol.
+  # LLM chat client backed by the ruby_llm gem.
   #
-  # @example Simple chat (no tools)
+  # Manages the full tool-use loop: seeding chat history from the Event table,
+  # dispatching tool calls via {Tools::Registry}, emitting {Events::ToolCall}
+  # and {Events::ToolResponse} events, and enforcing interrupt + round limits.
+  #
+  # A fresh RubyLLM::Chat is created per {#chat_with_tools} call so history is
+  # always reconstructed from the database (stateless design).
+  #
+  # @example Background job usage
   #   client = LLM::Client.new
-  #   client.chat([{role: "user", content: "Say hello"}])
-  #   # => "Hello! How can I help you today?"
-  #
-  # @example Chat with tools
-  #   registry = Tools::Registry.new
-  #   registry.register(Tools::WebGet)
-  #   client.chat_with_tools(messages, registry: registry, session_id: session.id)
+  #   client.chat_with_tools(session.messages_for_llm, registry: registry, session_id: session.id)
   class Client
-    # Synthetic tool_result message when a tool is skipped due to user interrupt.
+    # Synthetic result content used when a tool is skipped due to user interrupt.
     INTERRUPT_MESSAGE = "Stopped by user"
 
-    # @return [Providers::Anthropic] the underlying API provider
-    attr_reader :provider
-
-    # @return [String] the model identifier used for API calls
+    # @return [String] the model identifier
     attr_reader :model
 
     # @return [Integer] maximum tokens in the response
     attr_reader :max_tokens
 
-    # @param model [String] Anthropic model identifier (default from Settings)
-    # @param max_tokens [Integer] maximum tokens in the response (default from Settings)
-    # @param provider [Providers::Anthropic, nil] injectable provider instance;
-    #   defaults to a new {Providers::Anthropic} using credentials
+    # @return [RubyLLM::Tokens, nil] token usage from the most recent {#chat_with_tools} call
+    attr_reader :last_tokens
+
+    # @param model [String] model identifier (default from Settings)
+    # @param max_tokens [Integer] maximum response tokens (default from Settings)
     # @param logger [Logger, nil] optional logger for tool call tracing
-    def initialize(model: Anima::Settings.model, max_tokens: Anima::Settings.max_tokens, provider: nil, logger: nil)
-      @provider = build_provider(provider)
+    # @param provider [Symbol, nil] override the ruby_llm provider (e.g. +:ollama+);
+    #   when set, +assume_model_exists+ is enabled so local/unlisted models are accepted
+    def initialize(model: Anima::Settings.model, max_tokens: Anima::Settings.max_tokens, logger: nil, provider: nil)
       @model = model
       @max_tokens = max_tokens
       @logger = logger
+      @provider = provider
     end
 
-    # Send messages to the LLM and return the assistant's text response.
+    # Runs the LLM tool-use loop on a full message history.
     #
-    # @param messages [Array<Hash>] conversation messages, each with +:role+ and +:content+
-    # @param options [Hash] additional API parameters (e.g. +system:+, +temperature:+)
-    # @return [String] the assistant's response text
-    # @raise [Providers::Anthropic::Error] on API errors
-    # @raise [Providers::Anthropic::AuthenticationError] on auth failures
-    def chat(messages, **options)
-      response = provider.create_message(
-        model: model,
-        messages: messages,
-        max_tokens: max_tokens,
-        **options
-      )
-
-      extract_text(response)
-    end
-
-    # Send messages with tool support. Runs the full tool execution loop:
-    # call LLM, execute any requested tools, feed results back, repeat
-    # until the LLM produces a final text response.
+    # Seeds a fresh RubyLLM::Chat with prior history, then calls +ask+ with
+    # the final user message. Tool calls are dispatched through the registry and
+    # emitted as events. Interrupts and max-round limits are enforced.
     #
-    # Emits {Events::ToolCall} and {Events::ToolResponse} events for each
-    # tool interaction so they're persisted and visible in the event stream.
-    #
-    # When the user interrupts via Escape, remaining tools receive synthetic
-    # "Stopped by user" results and the loop exits without another LLM call.
-    #
-    # @param messages [Array<Hash>] conversation messages in Anthropic format
-    # @param registry [Tools::Registry] registered tools to make available
-    # @param session_id [Integer, String] session ID for emitted events
-    # @param options [Hash] additional API parameters (e.g. +system:+)
-    # @return [String, nil] the assistant's final text response, or nil when interrupted
-    # @raise [Providers::Anthropic::Error] on API errors
+    # @param messages [Array<Hash>] full message history ending with the pending
+    #   user message (each with +:role+ and +:content+)
+    # @param registry [Tools::Registry] available tools
+    # @param session_id [Integer, nil] session ID for events; nil for phantom sessions
+    # @param options [Hash] extra options; +:system+ sets the system prompt
+    # @return [String, nil] the assistant's final text, or nil when interrupted
     def chat_with_tools(messages, registry:, session_id:, **options)
-      messages = messages.dup
-      rounds = 0
+      return nil if messages.empty?
 
-      loop do
-        rounds += 1
-        max_rounds = Anima::Settings.max_tool_rounds
-        if rounds > max_rounds
-          return "[Tool loop exceeded #{max_rounds} rounds — halting]"
+      round_count = 0
+      current_tool_call = nil
+
+      chat = build_chat(messages, options)
+      register_tools(chat, registry, session_id)
+
+      chat.on_tool_call do |tc|
+        round_count += 1
+        max = Anima::Settings.max_tool_rounds
+        raise MaxRoundsExceeded, "Tool loop exceeded #{max} rounds" if round_count > max
+
+        current_tool_call = tc
+
+        if interrupted?(session_id)
+          emit_interrupted_call(tc, session_id)
+          raise InterruptRequested
         end
 
-        response = provider.create_message(
-          model: model,
-          messages: messages,
-          max_tokens: max_tokens,
-          tools: registry.schemas,
-          **options
-        )
-
-        log(:debug, "stop_reason=#{response["stop_reason"]} content_types=#{(response["content"] || []).map { |b| b["type"] }.join(",")}")
-
-        if response["stop_reason"] == "tool_use"
-          tool_results = execute_tools(response, registry, session_id)
-
-          messages += [
-            {role: "assistant", content: response["content"]},
-            {role: "user", content: tool_results}
-          ]
-
-          if interrupted?(session_id)
-            clear_interrupt!(session_id)
-            return nil
-          end
-        else
-          return extract_text(response)
-        end
+        log(:debug, "tool_call: #{tc.name}(#{tc.arguments.to_json})")
+        Events::Bus.emit(Events::ToolCall.new(
+          content: "Calling #{tc.name}", tool_name: tc.name,
+          tool_input: tc.arguments, tool_use_id: tc.id, session_id: session_id
+        ))
       end
+
+      chat.on_tool_result do |result|
+        tc = current_tool_call
+        next unless tc
+
+        result_content = format_result(result)
+        log(:debug, "tool_result: #{tc.name} → #{result_content.to_s.truncate(200)}")
+
+        Events::Bus.emit(Events::ToolResponse.new(
+          content: result_content, tool_name: tc.name, tool_use_id: tc.id,
+          success: result_success?(result),
+          session_id: session_id
+        ))
+      end
+
+      last_msg = messages.last
+      response = chat.ask(message_content(last_msg[:content]))
+
+      if interrupted?(session_id)
+        clear_interrupt!(session_id)
+        return nil
+      end
+
+      @last_tokens = response.tokens
+      response.content.to_s
+
+    rescue MaxRoundsExceeded => e
+      "[Tool loop exceeded #{Anima::Settings.max_tool_rounds} rounds — halting]"
+    rescue InterruptRequested
+      clear_interrupt!(session_id)
+      nil
     end
 
     private
 
-    def build_provider(provider)
-      provider || Providers::Anthropic.new
-    end
-
-    def extract_text(response)
-      content = response["content"] || []
-
-      content
-        .select { |block| block["type"] == "text" }
-        .map { |block| block["text"] }
-        .join
-    end
-
-    def extract_tool_uses(response)
-      content = response["content"] || []
-      content.select { |block| block["type"] == "tool_use" }
-    end
-
-    # Executes all tool_use blocks from a response, emitting events for each.
-    # Checks for user interrupt between tools — remaining tools receive
-    # synthetic results to satisfy the Anthropic API's tool_use/tool_result
-    # pairing requirement (a missing result permanently breaks the conversation).
+    # Builds a seeded RubyLLM::Chat from message history (all but the last message).
     #
-    # @param response [Hash] Anthropic API response with tool_use content blocks
-    # @param registry [Tools::Registry] tool registry for dispatch
-    # @param session_id [Integer, String] session ID for events
-    # @return [Array<Hash>] tool_result content blocks for the next API call
-    def execute_tools(response, registry, session_id)
-      tool_uses = extract_tool_uses(response)
-      results = []
-
-      tool_uses.each_with_index do |tool_use, index|
-        if interrupted?(session_id)
-          remaining = tool_uses[index..]
-          results.concat(interrupt_remaining_tools(remaining, session_id)) if remaining&.any?
-          break
-        end
-        results << execute_single_tool(tool_use, registry, session_id)
+    # @param messages [Array<Hash>] full message history
+    # @param options [Hash] may include :system for the system prompt
+    # @return [RubyLLM::Chat]
+    def build_chat(messages, options)
+      chat_opts = {model: model}
+      if @provider
+        chat_opts[:provider] = @provider
+        chat_opts[:assume_model_exists] = true
       end
+      chat = RubyLLM.chat(**chat_opts)
+      chat.with_params(max_tokens: @max_tokens) if @max_tokens
+      chat.with_headers(oauth_headers) if oauth_token?
+      chat.with_instructions(options[:system]) if options[:system]
 
-      results
+      messages[0..-2].each { |msg| seed_message(chat, msg) }
+
+      chat
     end
 
-    # Creates synthetic "Stopped by user" results for all tools in the list.
+    # Adds a single message to the chat, wrapping array content in Content::Raw
+    # so tool_use / tool_result blocks pass through Anthropic formatting unchanged.
     #
-    # @param tool_uses [Array<Hash>] remaining tool_use content blocks
-    # @param session_id [Integer, String] session ID for events
-    # @return [Array<Hash>] tool_result content blocks
-    def interrupt_remaining_tools(tool_uses, session_id)
-      tool_uses.map { |tool_use| interrupt_tool(tool_use, session_id) }
-    end
-
-    # Executes a single tool and always returns a tool_result — even if the
-    # tool raises. Per the Anthropic tool-use protocol, every tool_use must
-    # have a matching tool_result; a missing result permanently corrupts the
-    # conversation history and breaks the session.
-    def execute_single_tool(tool_use, registry, session_id)
-      name = tool_use["name"]
-      id = tool_use["id"]
-      input = tool_use["input"] || {}
-
-      log(:debug, "tool_call: #{name}(#{input.to_json})")
-
-      Events::Bus.emit(Events::ToolCall.new(
-        content: "Calling #{name}", tool_name: name,
-        tool_input: input, tool_use_id: id, session_id: session_id
-      ))
-
-      result = begin
-        registry.execute(name, input)
-      rescue => error
-        Rails.logger.error("Tool #{name} raised #{error.class}: #{error.message}")
-        {error: "#{error.class}: #{error.message}"}
+    # @param chat [RubyLLM::Chat]
+    # @param msg [Hash] with :role and :content keys
+    # @return [void]
+    def seed_message(chat, msg)
+      content = if msg[:content].is_a?(Array)
+        RubyLLM::Content::Raw.new(msg[:content])
+      else
+        msg[:content].to_s
       end
-
-      result_content = format_tool_result(result)
-      log(:debug, "tool_result: #{name} → #{result_content.to_s.truncate(200)}")
-
-      Events::Bus.emit(Events::ToolResponse.new(
-        content: result_content, tool_name: name, tool_use_id: id,
-        success: !result.is_a?(Hash) || !result.key?(:error),
-        session_id: session_id
-      ))
-
-      {type: "tool_result", tool_use_id: id, content: result_content}
+      chat.add_message(role: msg[:role].to_sym, content: content)
     end
 
-    # Creates a synthetic "Stopped by user" result for a tool that was not
-    # executed due to user interrupt. Emits both ToolCall and ToolResponse
-    # events so the TUI shows the interrupted tool in the event stream.
+    # Instantiates all tools from the registry and registers them with the chat.
+    # Each tool instance implements the RubyLLM::Tool interface directly.
     #
-    # @param tool_use [Hash] Anthropic tool_use content block
-    # @param session_id [Integer, String] session ID for events
-    # @return [Hash] tool_result content block
-    def interrupt_tool(tool_use, session_id)
-      name = tool_use["name"]
-      id = tool_use["id"]
-      input = tool_use["input"] || {}
-
-      Events::Bus.emit(Events::ToolCall.new(
-        content: "Skipped #{name} (interrupted)", tool_name: name,
-        tool_input: input, tool_use_id: id, session_id: session_id
-      ))
-
-      Events::Bus.emit(Events::ToolResponse.new(
-        content: INTERRUPT_MESSAGE, tool_name: name, tool_use_id: id,
-        success: false, session_id: session_id
-      ))
-
-      {type: "tool_result", tool_use_id: id, content: INTERRUPT_MESSAGE}
+    # @param chat [RubyLLM::Chat]
+    # @param registry [Tools::Registry]
+    # @param session_id [Integer, nil]
+    # @return [void]
+    def register_tools(chat, registry, session_id)
+      registry.instances.each_value do |instance|
+        chat.with_tool(instance)
+      end
     end
 
-    # Checks the database for a pending interrupt flag on the session.
+    # Extracts string content from a message's content field.
+    # Array content (e.g. mixed tool_use blocks) is serialised to JSON.
     #
-    # @param session_id [Integer, String] session to check
-    # @return [Boolean] whether the session has a pending interrupt request
+    # @param content [Array, String] raw content from a message hash
+    # @return [String]
+    def message_content(content)
+      content.is_a?(Array) ? content.to_json : content.to_s
+    end
+
+    # @param session_id [Integer, nil]
+    # @return [Boolean]
     def interrupted?(session_id)
+      return false unless session_id
+
       Session.where(id: session_id, interrupt_requested: true).exists?
     end
 
-    # Clears the interrupt flag so the agent loop can continue with pending
-    # messages. Also cleared by {AgentRequestJob#clear_interrupt} as a safety
-    # net for unexpected exits.
-    #
-    # @param session_id [Integer, String] session to clear
+    # @param session_id [Integer, nil]
     # @return [void]
     def clear_interrupt!(session_id)
+      return unless session_id
+
       Session.where(id: session_id).update_all(interrupt_requested: false)
     end
 
-    def log(level, message)
-      return unless @logger
-
-      @logger.public_send(level, message)
-    end
-
-    def format_tool_result(result)
+    # Serialises a tool result to a string for event emission.
+    # Hash results (e.g. +{error: "..."}+) are JSON-encoded to preserve structure.
+    #
+    # @param result [Hash, Object] raw tool return value
+    # @return [String]
+    def format_result(result)
       result.is_a?(Hash) ? result.to_json : result.to_s
     end
+
+    # @param result [Hash, Object] raw tool return value
+    # @return [Boolean] true unless the result is a Hash with an :error key
+    def result_success?(result)
+      !result.is_a?(Hash) || !result.key?(:error)
+    end
+
+    # Emits a skipped tool call/response pair when the user interrupts mid-loop.
+    # The synthetic INTERRUPT_MESSAGE satisfies the Anthropic API requirement that
+    # every tool_use block has a paired tool_result.
+    #
+    # @param tc [RubyLLM::ToolCall] the tool call being skipped
+    # @param session_id [Integer, nil]
+    # @return [void]
+    def emit_interrupted_call(tc, session_id)
+      Events::Bus.emit(Events::ToolCall.new(
+        content: "Skipped #{tc.name} (interrupted)", tool_name: tc.name,
+        tool_input: tc.arguments, tool_use_id: tc.id, session_id: session_id
+      ))
+      Events::Bus.emit(Events::ToolResponse.new(
+        content: INTERRUPT_MESSAGE, tool_name: tc.name, tool_use_id: tc.id,
+        success: false, session_id: session_id
+      ))
+    end
+
+    # @param level [Symbol] log level (e.g. :debug, :info)
+    # @param message [String]
+    # @return [void]
+    def log(level, message)
+      @logger&.public_send(level, message)
+    end
+
+    # Prefix that identifies an Anthropic OAuth (subscription) token.
+    OAUTH_TOKEN_PREFIX = "sk-ant-oat01-"
+
+    # Beta header required for OAuth token requests.
+    OAUTH_BETA = "oauth-2025-04-20"
+
+    # Anthropic API version header value.
+    ANTHROPIC_API_VERSION = "2023-06-01"
+
+    # @return [Boolean] true when the configured API key is an OAuth subscription token
+    def oauth_token?
+      RubyLLM.config.anthropic_api_key.to_s.start_with?(OAUTH_TOKEN_PREFIX)
+    end
+
+    # @return [Hash] Authorization and anthropic-beta headers for OAuth requests
+    def oauth_headers
+      key = RubyLLM.config.anthropic_api_key
+      {
+        "Authorization"  => "Bearer #{key}",
+        "anthropic-beta" => OAUTH_BETA
+      }
+    end
+
+    # Raised when the tool-loop exceeds the max_tool_rounds limit.
+    class MaxRoundsExceeded < StandardError; end
+
+    # Raised when a user interrupt is detected during tool execution.
+    class InterruptRequested < StandardError; end
   end
 end

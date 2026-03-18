@@ -3,11 +3,10 @@
 module Tools
   class UnknownToolError < StandardError; end
 
-  # Manages tool registration, schema export, and dispatch.
+  # Manages tool registration and dispatch.
   # Accepts both tool classes (e.g. {Tools::Base} subclasses) and tool
-  # instances (e.g. {Tools::McpTool}) via duck typing. Classes are
-  # instantiated with the registry's context on each execution; instances
-  # are called directly since they carry their own state.
+  # instances (e.g. {RubyLLM::MCP::Tool}) via duck typing. Classes are
+  # instantiated with the registry's context; instances are used as-is.
   #
   # @example
   #   registry = Tools::Registry.new(context: {shell_session: my_shell})
@@ -23,29 +22,42 @@ module Tools
       @context = context
     end
 
-    # Register a tool class or instance. Must respond to +tool_name+ and +schema+.
-    # @param tool [Class<Tools::Base>, #tool_name] tool class or duck-typed instance
+    # Register a tool class or instance.
+    # Accepts {Tools::Base} subclasses (keyed by +tool_name+) and
+    # {RubyLLM::MCP::Tool} instances (keyed by +name+).
+    # @param tool [Class<Tools::Base>, #name] tool class or duck-typed instance
     # @return [void]
     def register(tool)
-      @tools[tool.tool_name] = tool
+      key = tool.respond_to?(:tool_name) ? tool.tool_name : tool.name
+      @tools[key] = tool
     end
 
-    # @return [Array<Hash>] schema array for the Anthropic tools API parameter
-    def schemas
-      @tools.values.map(&:schema)
+    # Returns a hash of instantiated tool instances, keyed by name.
+    # Classes are instantiated with the registry's context; instances are returned as-is.
+    #
+    # @return [Hash{String => Object}] name => instance
+    def instances
+      @tools.transform_values do |tool|
+        tool.is_a?(Class) ? tool.new(**@context) : tool
+      end
     end
 
     # Execute a tool by name. Classes are instantiated with the registry's
-    # context; instances are called directly.
+    # context; instances are called directly via +call+.
     #
     # @param name [String] registered tool name
-    # @param input [Hash] tool input parameters
+    # @param input [Hash] tool input parameters (string-keyed)
     # @return [String, Hash] tool execution result
     # @raise [UnknownToolError] if no tool is registered with the given name
     def execute(name, input)
       tool = @tools.fetch(name) { raise UnknownToolError, "Unknown tool: #{name}" }
       instance = tool.is_a?(Class) ? tool.new(**@context) : tool
-      instance.execute(input)
+      instance.call(input)
+    end
+
+    # @return [Array<Hash>] schema array for the Anthropic tools API parameter
+    def schemas
+      instances.values.map(&:schema)
     end
 
     # @param name [String] tool name to check

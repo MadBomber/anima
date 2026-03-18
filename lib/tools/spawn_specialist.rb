@@ -45,6 +45,12 @@ module Tools
       }
     end
 
+    # Returns the params schema built dynamically from input_schema.
+    # Overrides the RubyLLM::Tool default to support the runtime-evaluated enum.
+    def params_schema
+      RubyLLM::Utils.deep_stringify_keys(self.class.input_schema)
+    end
+
     # @return [Hash] JSON Schema property for the name parameter
     def self.name_property
       registry = Agents::Registry.instance
@@ -68,13 +74,18 @@ module Tools
     # Creates a child session with the specialist's predefined prompt and tools,
     # emits the task as a user message, and queues background processing.
     #
-    # @param input [Hash<String, Object>] with "name", "task", and "expected_output"
+    # @param name [String] specialist agent name from the registry
+    # @param task [String] what the specialist should do
+    # @param expected_output [String] description of the expected deliverable
     # @return [String] confirmation with child session ID
     # @return [Hash{Symbol => String}] with :error key on validation failure
-    def execute(input)
-      task = input["task"].to_s.strip
-      expected_output = input["expected_output"].to_s.strip
-      name = input["name"].to_s.strip
+    def execute(name:, task:, expected_output:)
+      error = check_spawn_depth
+      return error if error
+
+      name = name.to_s.strip
+      task = task.to_s.strip
+      expected_output = expected_output.to_s.strip
 
       return {error: "Name cannot be blank"} if name.empty?
       return {error: "Task cannot be blank"} if task.empty?

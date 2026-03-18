@@ -34,8 +34,6 @@ class Event < ApplicationRecord
   validates :payload, presence: true
   validates :timestamp, presence: true
 
-  after_create :schedule_token_count, if: :llm_message?
-
   # @!method self.llm_messages
   #   Events that represent conversation turns sent to the LLM API.
   #   @return [ActiveRecord::Relation]
@@ -92,9 +90,4 @@ class Event < ApplicationRecord
     [(text.bytesize / BYTES_PER_TOKEN.to_f).ceil, 1].max
   end
 
-  private
-
-  def schedule_token_count
-    CountEventTokensJob.perform_later(id)
-  end
 end

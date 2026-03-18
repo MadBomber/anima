@@ -10,31 +10,27 @@ module Tools
   class Bash < Base
     def self.tool_name = "bash"
 
-    def self.description = "Execute a bash command. Working directory and environment persist across calls within a conversation."
+    description "Execute a bash command. Working directory and environment persist across calls within a conversation."
 
-    def self.input_schema
-      {
-        type: "object",
-        properties: {
-          command: {type: "string", description: "The bash command to execute"}
-        },
-        required: ["command"]
-      }
-    end
+    params type: "object",
+      properties: {
+        command: {type: "string", description: "The bash command to execute"}
+      },
+      required: ["command"]
 
     # @param shell_session [ShellSession] persistent shell backing this tool
-    def initialize(shell_session:, **)
+    def initialize(shell_session: nil, **)
       @shell_session = shell_session
     end
 
-    # @param input [Hash<String, Object>] string-keyed hash from the Anthropic API
+    # @param command [String] the bash command to run
     # @return [String] formatted output with stdout, stderr, and exit code
     # @return [Hash] with :error key on failure
-    def execute(input)
-      command = input["command"].to_s
-      return {error: "Command cannot be blank"} if command.strip.empty?
+    def execute(command:)
+      cmd = command.to_s
+      return {error: "Command cannot be blank"} if cmd.strip.empty?
 
-      result = @shell_session.run(command)
+      result = @shell_session.run(cmd)
       return result if result.key?(:error)
 
       format_result(result[:stdout], result[:stderr], result[:exit_code])

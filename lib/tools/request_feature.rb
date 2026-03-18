@@ -13,33 +13,25 @@ module Tools
   #
   # @see https://github.com/hoblin/anima/issues/103
   class RequestFeature < Base
-    # @return [String] tool identifier used in the Anthropic API schema
     def self.tool_name = "request_feature"
 
-    # @return [String] motivational description shown to the LLM
-    def self.description
-      "Don't have the right tool for this task? Request it! " \
-        "Creates a GitHub issue so the developer knows what you need."
-    end
+    description "Don't have the right tool for this task? Request it! " \
+      "Creates a GitHub issue so the developer knows what you need."
 
-    # @return [Hash] JSON Schema for the tool's input parameters
-    def self.input_schema
-      {
-        type: "object",
-        properties: {
-          title: {type: "string", description: "Short, descriptive title for the feature request"},
-          description: {type: "string", description: "What you need and why — what were you trying to do, and what's missing?"}
-        },
-        required: %w[title description]
-      }
-    end
+    params type: "object",
+      properties: {
+        title: {type: "string", description: "Short, descriptive title for the feature request"},
+        description: {type: "string", description: "What you need and why — what were you trying to do, and what's missing?"}
+      },
+      required: %w[title description]
 
-    # @param input [Hash<String, Object>] with +"title"+ and +"description"+ keys
+    # @param title [String] issue title
+    # @param description [String] issue body
     # @return [String] formatted gh command output (stdout, stderr, and exit code if non-zero)
     # @return [Hash{Symbol => String}] with +:error+ key on validation or repo resolution failure
-    def execute(input)
-      title = input["title"].to_s.strip
-      description = input["description"].to_s.strip
+    def execute(title:, description:)
+      title = title.to_s.strip
+      description = description.to_s.strip
       return {error: "Title cannot be blank"} if title.empty?
       return {error: "Description cannot be blank"} if description.empty?
 

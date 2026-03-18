@@ -94,4 +94,4 @@ rack_app = Rack::Builder.new do
 end
 
 puts "Starting MCP server on http://localhost:9292"
-Rackup::Handler.get("puma").run(rack_app, Port: 9292, Host: "localhost")
+Rackup::Handler.get("falcon").run(rack_app, Port: 9292, Host: "localhost")

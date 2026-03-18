@@ -2,8 +2,9 @@
 
 module Workflows
   # Loads workflow definitions from Markdown files and provides lookup.
-  # Scans two directories:
+  # Scans up to two directories:
   #   1. Built-in workflows shipped with Anima (workflows/ in the gem root)
+  #      — skipped when +Anima::Settings.load_builtin_workflows+ is false
   #   2. User-defined workflows (~/.anima/workflows/)
   # User workflows override built-in ones when names collide.
   class Registry
@@ -33,10 +34,12 @@ module Workflows
 
     # Loads definitions from both built-in and user directories.
     # User definitions override built-in ones with the same name.
+    # Built-in loading is skipped when +load_builtin_workflows+ is false
+    # in the user's config (set [workflows] load_builtin = false).
     #
     # @return [self]
     def load_all
-      load_directory(BUILTIN_DIR)
+      load_directory(BUILTIN_DIR) if Anima::Settings.load_builtin_workflows
       load_directory(USER_DIR)
       self
     end

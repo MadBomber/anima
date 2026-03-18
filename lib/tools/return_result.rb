@@ -9,21 +9,17 @@ module Tools
   class ReturnResult < Base
     def self.tool_name = "return_result"
 
-    def self.description = "Return your completed result to the parent agent. " \
+    description "Return your completed result to the parent agent. " \
       "Call this when you have fulfilled the assigned task."
 
-    def self.input_schema
-      {
-        type: "object",
-        properties: {
-          result: {
-            type: "string",
-            description: "The completed deliverable to send back to the parent agent"
-          }
-        },
-        required: ["result"]
-      }
-    end
+    params type: "object",
+      properties: {
+        result: {
+          type: "string",
+          description: "The completed deliverable to send back to the parent agent"
+        }
+      },
+      required: ["result"]
 
     # @param session [Session] the sub-agent session returning a result
     def initialize(session:, **)
@@ -33,10 +29,10 @@ module Tools
     # Emits a tool_call/tool_response pair in the parent session so the
     # parent agent sees the sub-agent result as a regular tool interaction.
     #
-    # @param input [Hash<String, Object>] with "result" key
+    # @param result [String] the completed deliverable
     # @return [String, Hash] confirmation message, or Hash with :error key on failure
-    def execute(input)
-      result = input["result"].to_s.strip
+    def execute(result:)
+      result = result.to_s.strip
       return {error: "Result cannot be blank"} if result.empty?
 
       parent = @session.parent_session

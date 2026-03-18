@@ -114,3 +114,21 @@ blocking_on_agent_message = false
 
 # Number of recent events to include in the analytical brain's context window.
 event_window = 20
+
+# ─── Workflows ─────────────────────────────────────────────────
+
+[workflows]
+
+# Set to false to suppress the built-in workflows shipped with Anima
+# and rely solely on your own ~/.anima/workflows/ directory.
+load_builtin = true
+
+# ─── Sub-agent ────────────────────────────────────────────────
+
+[sub_agent]
+
+# Maximum fraction of the token budget that parent-session events may consume
+# when a sub-agent assembles its context window. Prevents the sub-agent from
+# inheriting the entire parent conversation at spawn time and leaving no
+# headroom for its own work. Range: 0.0–1.0.
+parent_context_ratio = 0.5

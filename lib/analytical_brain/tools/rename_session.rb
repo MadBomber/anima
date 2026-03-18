@@ -11,52 +11,41 @@ module AnalyticalBrain
     class RenameSession < ::Tools::Base
       def self.tool_name = "rename_session"
 
-      def self.description = "Rename the conversation session. " \
+      description "Rename the conversation session. " \
         "Use one emoji followed by 1-3 descriptive words."
 
-      def self.input_schema
-        {
-          type: "object",
-          properties: {
-            emoji: {
-              type: "string",
-              description: "A single emoji representing the conversation topic"
-            },
-            name: {
-              type: "string",
-              description: "1-3 word descriptive name for the session"
-            }
+      params type: "object",
+        properties: {
+          emoji: {
+            type: "string",
+            description: "A single emoji representing the conversation topic"
           },
-          required: %w[emoji name]
-        }
-      end
+          name: {
+            type: "string",
+            description: "1-3 word descriptive name for the session"
+          }
+        },
+        required: %w[emoji name]
 
       # @param main_session [Session] the session to rename
       def initialize(main_session:, **)
         @main_session = main_session
       end
 
-      # @param input [Hash<String, Object>] with "emoji" and "name" keys
+      # @param emoji [String] single emoji for the session
+      # @param name [String] 1-3 word descriptive name
       # @return [String] confirmation message
       # @return [Hash] with :error key on validation failure
-      def execute(input)
-        error = validate(input)
-        return error if error
+      def execute(emoji:, name:)
+        emoji = emoji.to_s.strip
+        name = name.to_s.strip
 
-        full_name = build_name(input)
+        return {error: "Emoji cannot be blank"} if emoji.empty?
+        return {error: "Name cannot be blank"} if name.empty?
+
+        full_name = "#{emoji} #{name}".truncate(255)
         @main_session.update!(name: full_name)
         "Session renamed to: #{full_name}"
-      end
-
-      private
-
-      def validate(input)
-        return {error: "Emoji cannot be blank"} if input["emoji"].to_s.strip.empty?
-        {error: "Name cannot be blank"} if input["name"].to_s.strip.empty?
-      end
-
-      def build_name(input)
-        "#{input["emoji"].to_s.strip} #{input["name"].to_s.strip}".truncate(255)
       end
     end
   end

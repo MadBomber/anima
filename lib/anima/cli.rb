@@ -52,7 +52,7 @@ module Anima
       end
     end
 
-    # Start the Anima brain server (Puma + Solid Queue) via Foreman.
+    # Start the Anima brain server (Falcon + Solid Queue) via Foreman.
     # Environment precedence: -e flag > RAILS_ENV env var > "development".
     # Requires prior installation (~/.anima must exist).
     desc "start", "Start Anima (web + workers)"

@@ -21,34 +21,29 @@ module Tools
   class Think < Base
     def self.tool_name = "think"
 
-    def self.description
-      "Express your internal reasoning between tool calls. " \
-        "Use this to analyze intermediate results, plan next steps, or make decisions before continuing. " \
-        "Set visibility to \"aloud\" when you want the user to see your thought process."
-    end
+    description "Express your internal reasoning between tool calls. " \
+      "Use this to analyze intermediate results, plan next steps, or make decisions before continuing. " \
+      "Set visibility to \"aloud\" when you want the user to see your thought process."
 
-    def self.input_schema
-      {
-        type: "object",
-        properties: {
-          thoughts: {
-            type: "string",
-            description: "Your reasoning, analysis, or internal monologue"
-          },
-          visibility: {
-            type: "string",
-            enum: ["inner", "aloud"],
-            description: "\"inner\" (default) for silent reasoning; \"aloud\" to narrate for the user"
-          }
+    params type: "object",
+      properties: {
+        thoughts: {
+          type: "string",
+          description: "Your reasoning, analysis, or internal monologue"
         },
-        required: ["thoughts"]
-      }
-    end
+        visibility: {
+          type: "string",
+          enum: ["inner", "aloud"],
+          description: "\"inner\" (default) for silent reasoning; \"aloud\" to narrate for the user"
+        }
+      },
+      required: ["thoughts"]
 
-    # @param input [Hash] with "thoughts" and optional "visibility"
+    # @param thoughts [String] reasoning, analysis, or inner monologue
+    # @param visibility [String] "inner" for silent; "aloud" to narrate for the user
     # @return [String] acknowledgement — the value is in the call, not the result
-    def execute(input)
-      thoughts = input["thoughts"].to_s
+    # @return [Hash] with :error key when thoughts is blank
+    def execute(thoughts:, visibility: "inner")
       return {error: "Thoughts cannot be blank"} if thoughts.strip.empty?
 
       "OK"
