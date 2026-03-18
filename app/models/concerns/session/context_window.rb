@@ -74,16 +74,16 @@ module Session::ContextWindow
   end
 
   # Promotes all pending user messages to delivered status so they
-  # appear in the next LLM context.
+  # appear in the next LLM context. Runs as a single SQL UPDATE rather
+  # than N per-row round-trips.
+  #
+  # SQLite's JSON_REMOVE strips the redundant "status" key from the stored
+  # payload JSON in the same statement so the two representations stay in sync.
   #
   # @return [Integer] number of promoted messages
   def promote_pending_messages!
-    promoted = 0
-    events.where(event_type: "user_message", status: Event::PENDING_STATUS).find_each do |event|
-      event.update!(status: nil, payload: event.payload.except("status"))
-      promoted += 1
-    end
-    promoted
+    events.where(event_type: "user_message", status: Event::PENDING_STATUS)
+      .update_all("status = NULL, payload = JSON_REMOVE(payload, '$.status')")
   end
 
   private

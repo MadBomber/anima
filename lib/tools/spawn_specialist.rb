@@ -80,6 +80,9 @@ module Tools
     # @return [String] confirmation with child session ID
     # @return [Hash{Symbol => String}] with :error key on validation failure
     def execute(name:, task:, expected_output:)
+      error = check_spawn_depth
+      return error if error
+
       name = name.to_s.strip
       task = task.to_s.strip
       expected_output = expected_output.to_s.strip

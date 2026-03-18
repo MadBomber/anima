@@ -1,7 +1,12 @@
 # frozen_string_literal: true
 
 require "simplecov"
+# SimpleCov.start is called early in config/boot.rb when running `rails test`
+# so that files loaded during Rails boot (lib/anima.rb, lib/anima/settings.rb)
+# are tracked from the very beginning. Calling start again here is safe — it
+# reconfigures without restarting Coverage — and applies the full config.
 SimpleCov.start "rails" do
+
   add_filter "/test/"
   add_filter "/spec/"
 
@@ -32,7 +37,7 @@ SimpleCov.start "rails" do
   add_filter "lib/mcp/secrets.rb"
   # Controllers (no controller tests in this app)
   add_filter "app/controllers/"
-  # Loaded by gemspec before SimpleCov starts — can't be tracked
+  # Loaded by gemspec before Rails boots — cannot be tracked
   add_filter "lib/anima/version.rb"
 
   add_group "Models",           "app/models"

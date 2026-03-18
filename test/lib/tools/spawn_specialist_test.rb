@@ -106,4 +106,19 @@ class Tools::SpawnSpecialistTest < ActiveSupport::TestCase
     child = @session.child_sessions.first
     assert_equal @definition.tools, JSON.parse(child.granted_tools)
   end
+
+  # ── spawn-depth guard ──────────────────────────────────────────────────────
+
+  test "call returns error when session is at maximum spawn depth" do
+    root       = Session.create!
+    child      = Session.create!(parent_session_id: root.id)
+    grandchild = Session.create!(parent_session_id: child.id)
+    deep       = Session.create!(parent_session_id: grandchild.id)
+
+    tool = Tools::SpawnSpecialist.new(session: deep, agent_registry: @registry)
+    result = tool.call("name" => "test-specialist", "task" => "Do it", "expected_output" => "Done")
+
+    assert_kind_of Hash, result
+    assert_match(/maximum nesting depth/i, result[:error])
+  end
 end

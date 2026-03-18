@@ -7,6 +7,27 @@
 # Sessions form a hierarchy: a main session can spawn child sessions
 # (sub-agents) that inherit the parent's viewport context at fork time.
 #
+# == Design: hybrid persistence model
+#
+# Anima uses a deliberate hybrid between event-sourced and mutable state:
+#
+# * The {Event} table is append-only and is the canonical source of truth
+#   for *conversation history* — every message, tool call, and response.
+#
+# * The sessions table holds *metadata* that describes the session's current
+#   configuration: name, active_skills, active_workflow, view_mode.
+#   These are mutated in place by the {AnalyticalBrain} and the TUI.
+#
+# This is intentional. Metadata is config-like, not conversation-like.
+# Reconstructing session metadata from event history would require replaying
+# every SkillActivated/SessionRenamed signal, adding complexity with no
+# user-visible benefit. Keeping metadata mutable trades perfect auditability
+# for simplicity and performance.
+#
+# Consequence: event history alone cannot reconstruct the session's current
+# skill set or name. Both the events table and the sessions columns are
+# required for a complete picture.
+#
 # Behaviour is split across focused concerns:
 #   - {Session::Broadcasts}         — ActionCable broadcasting for state changes
 #   - {Session::SkillsAndWorkflows} — skill and workflow lifecycle

@@ -17,5 +17,6 @@ class CreateEvents < ActiveRecord::Migration[8.1]
     add_index :events, [:session_id, :event_type]
     add_index :events, :tool_use_id
     add_index :events, [:session_id, :status]
+    add_index :events, [:session_id, :id], name: "index_events_on_session_id_and_id"
   end
 end

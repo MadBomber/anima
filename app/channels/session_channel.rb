@@ -374,7 +374,11 @@ class SessionChannel < ApplicationCable::Channel
     end
 
     body = {model: Anima::Settings.model, messages: [{role: "user", content: "Hi"}], max_tokens: 1}.to_json
-    conn = Faraday.new("https://api.anthropic.com") { |f| f.response :json }
+    conn = Faraday.new("https://api.anthropic.com") do |f|
+      f.response :json
+      f.options.timeout      = 10  # read timeout (seconds)
+      f.options.open_timeout = 5   # connection timeout (seconds)
+    end
     response = conn.post("/v1/messages", body, headers)
 
     raise AuthenticationError, "Token rejected by Anthropic API (#{response.status})" if [401, 403].include?(response.status)

@@ -64,9 +64,11 @@ class AgentRequestJob < ApplicationJob
     # handles post-response updates (renaming, skill changes).
     session.schedule_analytical_brain!
   ensure
-    release_processing(session_id)
-    clear_interrupt(session_id)
-    agent_loop&.finalize
+    # Each cleanup step is independent. If one raises (e.g. DB unavailable),
+    # the others still run so the session lock is never permanently stuck.
+    safely { release_processing(session_id) }
+    safely { clear_interrupt(session_id) }
+    safely { agent_loop&.finalize }
   end
 
   private
@@ -105,6 +107,14 @@ class AgentRequestJob < ApplicationJob
   # the flag is reset even if the job crashes before reaching that code path.
   def clear_interrupt(session_id)
     Session.where(id: session_id, interrupt_requested: true).update_all(interrupt_requested: false)
+  end
+
+  # Runs a block and swallows any exception, logging it at error level.
+  # Used in the ensure block so each cleanup step runs independently.
+  def safely
+    yield
+  rescue => e
+    Rails.logger.error("[AgentRequestJob] cleanup error: #{e.class}: #{e.message}")
   end
 
   # Emits a system message before each retry so the user sees

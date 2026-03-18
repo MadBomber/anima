@@ -121,3 +121,111 @@ class LLM::ClientTest < ActiveSupport::TestCase
     false
   end
 end
+
+# Unit tests for LLM::Client that do NOT require a live LLM.
+# Exercises private helpers and edge cases that the Ollama integration
+# suite can't reach when Ollama is absent.
+class LLM::ClientUnitTest < ActiveSupport::TestCase
+  def setup
+    @client = LLM::Client.new
+    @session = Session.create!
+  end
+
+  # ── chat_with_tools early-exit ────────────────────────────────────────────
+
+  test "chat_with_tools returns nil immediately for an empty message list" do
+    registry = Tools::Registry.new
+    result = @client.chat_with_tools([], registry: registry, session_id: nil)
+    assert_nil result
+  end
+
+  # ── interrupted? ─────────────────────────────────────────────────────────
+
+  test "interrupted? returns false when session_id is nil" do
+    assert_equal false, @client.send(:interrupted?, nil)
+  end
+
+  test "interrupted? returns false when session has no interrupt requested" do
+    assert_equal false, @client.send(:interrupted?, @session.id)
+  end
+
+  test "interrupted? returns true when session has interrupt_requested set" do
+    @session.update_columns(interrupt_requested: true)
+    assert_equal true, @client.send(:interrupted?, @session.id)
+  end
+
+  # ── clear_interrupt! ─────────────────────────────────────────────────────
+
+  test "clear_interrupt! is a no-op when session_id is nil" do
+    assert_nil @client.send(:clear_interrupt!, nil)
+  end
+
+  test "clear_interrupt! clears interrupt_requested on the session" do
+    @session.update_columns(interrupt_requested: true)
+    @client.send(:clear_interrupt!, @session.id)
+    assert_equal false, @session.reload.interrupt_requested
+  end
+
+  # ── format_result ────────────────────────────────────────────────────────
+
+  test "format_result converts a Hash to JSON" do
+    result = @client.send(:format_result, {status: "ok", value: 42})
+    assert_equal '{"status":"ok","value":42}', result
+  end
+
+  test "format_result returns non-Hash values as strings" do
+    assert_equal "plain text", @client.send(:format_result, "plain text")
+    assert_equal "123",        @client.send(:format_result, 123)
+  end
+
+  # ── result_success? ───────────────────────────────────────────────────────
+
+  test "result_success? returns false when result is a Hash with an :error key" do
+    assert_equal false, @client.send(:result_success?, {error: "something went wrong"})
+  end
+
+  test "result_success? returns true for a Hash without :error" do
+    assert_equal true, @client.send(:result_success?, {output: "done"})
+  end
+
+  test "result_success? returns true for non-Hash results" do
+    assert_equal true, @client.send(:result_success?, "ok")
+    assert_equal true, @client.send(:result_success?, 42)
+  end
+
+  # ── message_content ───────────────────────────────────────────────────────
+
+  test "message_content serialises Array content to JSON" do
+    content = [{"type" => "text", "text" => "hello"}]
+    assert_equal content.to_json, @client.send(:message_content, content)
+  end
+
+  test "message_content returns String content as-is" do
+    assert_equal "hello world", @client.send(:message_content, "hello world")
+  end
+
+  # ── oauth_token? ─────────────────────────────────────────────────────────
+
+  test "oauth_token? returns false when api key does not start with OAuth prefix" do
+    RubyLLM.configure { |c| c.anthropic_api_key = "sk-ant-api-key-123" }
+    assert_equal false, @client.send(:oauth_token?)
+  end
+
+  test "oauth_token? returns true when api key starts with OAuth prefix" do
+    RubyLLM.configure { |c| c.anthropic_api_key = "#{LLM::Client::OAUTH_TOKEN_PREFIX}fake" }
+    assert_equal true, @client.send(:oauth_token?)
+  ensure
+    RubyLLM.configure { |c| c.anthropic_api_key = "sk-ant-api-key-restore" }
+  end
+
+  # ── oauth_headers ─────────────────────────────────────────────────────────
+
+  test "oauth_headers returns Authorization and anthropic-beta headers" do
+    RubyLLM.configure { |c| c.anthropic_api_key = "#{LLM::Client::OAUTH_TOKEN_PREFIX}mytoken" }
+    headers = @client.send(:oauth_headers)
+    assert_equal "Bearer #{LLM::Client::OAUTH_TOKEN_PREFIX}mytoken", headers["Authorization"]
+    assert_equal LLM::Client::OAUTH_BETA, headers["anthropic-beta"]
+  ensure
+    RubyLLM.configure { |c| c.anthropic_api_key = "sk-ant-api-key-restore" }
+  end
+end

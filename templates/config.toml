@@ -115,6 +115,14 @@ blocking_on_agent_message = false
 # Number of recent events to include in the analytical brain's context window.
 event_window = 20
 
+# ─── Workflows ─────────────────────────────────────────────────
+
+[workflows]
+
+# Set to false to suppress the built-in workflows shipped with Anima
+# and rely solely on your own ~/.anima/workflows/ directory.
+load_builtin = true
+
 # ─── Sub-agent ────────────────────────────────────────────────
 
 [sub_agent]
