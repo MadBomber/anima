@@ -1,37 +1,37 @@
 # frozen_string_literal: true
 
-require "httparty"
+require "faraday"
 
 module Providers
+  # Anthropic-specific utilities that are not covered by the ruby_llm gem:
+  # - Token counting (Anthropic-only endpoint)
+  # - Credential validation (for the TUI token-setup flow)
+  # - Shared error hierarchy (referenced by job retry/discard declarations)
+  #
+  # Chat requests are handled by {LLM::Client} via the ruby_llm gem.
   class Anthropic
-    include HTTParty
-
-    base_uri "https://api.anthropic.com"
-
-    TOKEN_PREFIX = "sk-ant-oat01-"
-    TOKEN_MIN_LENGTH = 80
+    API_BASE    = "https://api.anthropic.com"
     API_VERSION = "2023-06-01"
-    REQUIRED_BETA = "oauth-2025-04-20"
+    OAUTH_BETA  = "oauth-2025-04-20"
+
+    TOKEN_PREFIX     = "sk-ant-oat01-"
+    TOKEN_MIN_LENGTH = 80
+
+    # ── Error hierarchy ──────────────────────────────────────────────────────
 
     class Error < StandardError; end
     class AuthenticationError < Error; end
     class TokenFormatError < Error; end
 
-    # Transient errors that may succeed on retry (network issues, rate limits, server errors).
+    # Transient errors eligible for job-level retries.
     class TransientError < Error; end
     class RateLimitError < TransientError; end
     class ServerError < TransientError; end
 
-    class << self
-      def fetch_token
-        token = CredentialStore.read("anthropic", "subscription_token")
-        raise AuthenticationError, <<~MSG.strip if token.blank?
-          No Anthropic subscription token found in credentials.
-          Use the TUI token setup (Ctrl+a → a) to configure your token.
-        MSG
-        token
-      end
+    # ── Class-level helpers (used by session_channel token setup) ─────────
 
+    class << self
+      # Validates the token string format before making any API call.
       def validate_token_format!(token)
         unless token.start_with?(TOKEN_PREFIX)
           raise TokenFormatError,
@@ -46,35 +46,20 @@ module Providers
         true
       end
 
+      # Validates the token against the live Anthropic API.
       def validate_token_api!(token)
-        provider = new(token)
-        provider.validate_credentials!
+        new(token).validate_credentials!
       end
     end
 
-    attr_reader :token
+    # ── Instance ─────────────────────────────────────────────────────────────
 
     def initialize(token = nil)
-      @token = token || self.class.fetch_token
+      @token = token || resolve_token
     end
 
-    def create_message(model:, messages:, max_tokens:, **options)
-      body = {model: model, messages: messages, max_tokens: max_tokens}.merge(options)
-
-      response = self.class.post(
-        "/v1/messages",
-        body: body.to_json,
-        headers: request_headers,
-        timeout: Anima::Settings.api_timeout
-      )
-
-      handle_response(response)
-    rescue Errno::ECONNRESET, Net::ReadTimeout, Net::OpenTimeout, SocketError, EOFError => e
-      raise TransientError, "#{e.class}: #{e.message}"
-    end
-
-    # Count tokens in a message payload without creating a message.
-    # Uses the free Anthropic token counting endpoint.
+    # Counts tokens in a message payload without creating a message.
+    # Uses the Anthropic token counting endpoint (/v1/messages/count_tokens).
     #
     # @param model [String] Anthropic model identifier
     # @param messages [Array<Hash>] conversation messages
@@ -83,33 +68,24 @@ module Providers
     # @raise [Error] on API errors
     def count_tokens(model:, messages:, **options)
       body = {model: model, messages: messages}.merge(options)
-
-      response = self.class.post(
-        "/v1/messages/count_tokens",
-        body: body.to_json,
-        headers: request_headers,
-        timeout: Anima::Settings.api_timeout
-      )
-
-      result = handle_response(response)
-      result["input_tokens"]
-    rescue Errno::ECONNRESET, Net::ReadTimeout, Net::OpenTimeout, SocketError, EOFError => e
+      response = connection.post("/v1/messages/count_tokens", body.to_json, request_headers)
+      handle_response(response)["input_tokens"]
+    rescue Faraday::Error => e
       raise TransientError, "#{e.class}: #{e.message}"
     end
 
+    # Sends a minimal API request to verify the token is accepted.
+    #
+    # @raise [AuthenticationError] if the token is rejected
     def validate_credentials!
-      response = self.class.post(
-        "/v1/messages",
-        body: {
-          model: Anima::Settings.model,
-          messages: [{role: "user", content: "Hi"}],
-          max_tokens: 1
-        }.to_json,
-        headers: request_headers,
-        timeout: Anima::Settings.api_timeout
-      )
+      body = {
+        model: Anima::Settings.model,
+        messages: [{role: "user", content: "Hi"}],
+        max_tokens: 1
+      }
+      response = connection.post("/v1/messages", body.to_json, request_headers)
 
-      case response.code
+      case response.status
       when 200
         true
       when 401
@@ -121,44 +97,70 @@ module Providers
       else
         handle_response(response)
       end
+    rescue Faraday::Error => e
+      raise TransientError, "#{e.class}: #{e.message}"
     end
 
     private
 
+    def resolve_token
+      ENV["ANTHROPIC_OAUTH_TOKEN"].presence ||
+        ENV["ANTHROPIC_API_KEY"].presence ||
+        begin
+          Rails.application.credentials.dig(:anthropic, :subscription_token)
+        rescue
+          nil
+        end
+    end
+
+    def connection
+      @connection ||= Faraday.new(API_BASE) do |f|
+        f.options.timeout = Anima::Settings.api_timeout
+        f.request :json
+        f.response :json
+      end
+    end
+
     def request_headers
-      {
-        "Authorization" => "Bearer #{token}",
-        "anthropic-version" => API_VERSION,
-        "anthropic-beta" => REQUIRED_BETA,
-        "content-type" => "application/json"
-      }
+      if @token&.start_with?(TOKEN_PREFIX)
+        {
+          "Authorization"  => "Bearer #{@token}",
+          "anthropic-version" => API_VERSION,
+          "anthropic-beta" => OAUTH_BETA,
+          "content-type"   => "application/json"
+        }
+      else
+        {
+          "x-api-key"         => @token.to_s,
+          "anthropic-version" => API_VERSION,
+          "content-type"      => "application/json"
+        }
+      end
     end
 
     def handle_response(response)
-      case response.code
+      case response.status
       when 200
-        response.parsed_response
+        response.body
       when 400
         raise Error, "Bad request: #{error_message(response)}"
       when 401
-        raise AuthenticationError,
-          "Authentication failed (401): #{error_message(response)}. Re-run `claude setup-token` and use the TUI token setup (Ctrl+a → a)."
+        raise AuthenticationError, "Authentication failed (401): #{error_message(response)}"
       when 403
-        raise AuthenticationError,
-          "Forbidden (403): #{error_message(response)}"
+        raise AuthenticationError, "Forbidden (403): #{error_message(response)}"
       when 429
         raise RateLimitError, "Rate limit exceeded: #{error_message(response)}"
       when 500..599
-        raise ServerError, "Anthropic server error (#{response.code}): #{response.message}"
+        raise ServerError, "Anthropic server error (#{response.status})"
       else
-        raise Error, "Unexpected response (#{response.code}): #{response.message}"
+        raise Error, "Unexpected response (#{response.status})"
       end
     end
 
     def error_message(response)
-      response.parsed_response&.dig("error", "message") || response.message
-    rescue JSON::ParserError, NoMethodError
-      response.message
+      response.body&.dig("error", "message") || response.reason_phrase.to_s
+    rescue
+      ""
     end
   end
 end

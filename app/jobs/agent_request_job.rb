@@ -17,6 +17,8 @@ class AgentRequestJob < ApplicationJob
   queue_as :default
 
   retry_on Providers::Anthropic::TransientError,
+    RubyLLM::RateLimitError, RubyLLM::ServerError,
+    RubyLLM::ServiceUnavailableError, RubyLLM::OverloadedError,
     wait: :polynomially_longer, attempts: 5 do |job, error|
     Events::Bus.emit(Events::SystemMessage.new(
       content: "Failed after multiple retries: #{error.message}",
@@ -25,7 +27,7 @@ class AgentRequestJob < ApplicationJob
   end
 
   discard_on ActiveRecord::RecordNotFound
-  discard_on Providers::Anthropic::AuthenticationError do |job, error|
+  discard_on Providers::Anthropic::AuthenticationError, RubyLLM::UnauthorizedError do |job, error|
     session_id = job.arguments.first
     # Persistent system message for the event log
     Events::Bus.emit(Events::SystemMessage.new(

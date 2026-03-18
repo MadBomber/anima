@@ -8,9 +8,6 @@ SimpleCov.start "rails" do
   # ── Excluded: require live external services or terminal I/O ──────────
   # TUI — terminal rendering, not unit-testable
   add_filter "lib/tui/"
-  # LLM / Provider — real Anthropic API calls
-  add_filter "lib/llm/client.rb"
-  add_filter "lib/providers/anthropic.rb"
   # MCP — requires real server connections or spawned processes
   add_filter "lib/mcp/stdio_transport.rb"
   add_filter "lib/mcp/health_check.rb"
