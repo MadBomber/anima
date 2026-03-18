@@ -7,4 +7,9 @@ Rails.application.config.after_initialize do
   # Global persister handles events from all sessions (brain server, background jobs).
   # Skipped in test — specs manage their own persisters for isolation.
   Events::Bus.subscribe(Events::Subscribers::Persister.new) unless Rails.env.test?
+
+  # Logs LLM completions (model, tokens, duration) to Rails.logger.
+  # Not gated on environment — logging is benign in test (unlike the persister
+  # above, which would write to the DB and interfere with test isolation).
+  LLM::InstrumentationSubscriber.subscribe!
 end

@@ -103,12 +103,14 @@ module AnalyticalBrain
       log.debug("system prompt:\n#{system}")
       log.debug("user message:\n#{messages.first[:content]}")
 
-      result = @client.chat_with_tools(
-        messages,
-        registry: build_registry,
-        session_id: nil,
-        system: system
-      )
+      result = RubyLLM::Instrumentation.with(session_id: @session.id, context: "analytical_brain") do
+        @client.chat_with_tools(
+          messages,
+          registry: build_registry,
+          session_id: nil,
+          system: system
+        )
+      end
 
       log.info("session=#{sid} — done: #{result.to_s.truncate(200)}")
       result

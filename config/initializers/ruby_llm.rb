@@ -13,6 +13,7 @@
 # accepts both x-api-key and Authorization: Bearer simultaneously, so no
 # provider patching is required.
 require "ruby_llm"
+require "ruby_llm/instrumentation"
 
 anthropic_key = ENV["ANTHROPIC_OAUTH_TOKEN"].presence ||
                 ENV["ANTHROPIC_API_KEY"].presence ||

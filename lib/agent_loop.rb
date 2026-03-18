@@ -85,7 +85,11 @@ class AgentLoop
     prompt = @session.system_prompt(environment_context: env_context)
     options[:system] = prompt if prompt
 
-    response = @client.chat_with_tools(messages, registry: @registry, session_id: @session.id, **options)
+    context  = @session.sub_agent? ? "sub_agent" : "agent"
+    metadata = {session_id: @session.id, context: context}
+    response = RubyLLM::Instrumentation.with(metadata) do
+      @client.chat_with_tools(messages, registry: @registry, session_id: @session.id, **options)
+    end
     return unless response
 
     token_count = @client.last_tokens&.output.to_i

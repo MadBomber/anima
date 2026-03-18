@@ -32,6 +32,7 @@ Gem::Specification.new do |spec|
   spec.add_dependency "faraday", "~> 2.0"
   spec.add_dependency "foreman", "~> 0.88"
   spec.add_dependency "ruby_llm", "~> 1.14"
+  spec.add_dependency "ruby_llm-instrumentation", "~> 0.3"
   spec.add_dependency "ruby_llm-mcp", "~> 1.0"
   spec.add_dependency "falcon", "~> 0.55"
   spec.add_dependency "rails", "~> 8.1"
