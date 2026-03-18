@@ -167,6 +167,8 @@ The agent has access to these built-in tools:
 | `spawn_specialist` | Spawn a named specialist sub-agent from the registry |
 | `spawn_subagent` | Spawn a generic child session with custom tool grants |
 | `return_result` | Sub-agents only — deliver results back to parent |
+| `think` | Express reasoning or inner monologue between tool calls |
+| `request_feature` | Create a GitHub issue when a needed capability is missing |
 
 Plus dynamic tools from configured MCP servers, namespaced as `server_name__tool_name`.
 
@@ -285,7 +287,7 @@ All tunable values are exposed through `~/.anima/config.toml` with hot-reload (n
 model = "claude-opus-4-6"
 fast_model = "claude-haiku-4-5"
 max_tokens = 8192
-max_tool_rounds = 250
+max_tool_rounds = 500
 token_budget = 190_000
 
 [timeouts]
@@ -295,7 +297,11 @@ command = 30
 [analytical_brain]
 max_tokens = 4096
 blocking_on_user_message = true
+blocking_on_agent_message = false
 event_window = 20
+
+[workflows]
+load_builtin = true
 
 [session]
 name_generation_interval = 30
@@ -553,7 +559,7 @@ This single example demonstrates every core principle:
 - Event-driven architecture on a shared event bus
 - Dynamic viewport context assembly (endless sessions, no compaction)
 - Analytical brain (skills, workflows, goals, session naming)
-- 8 built-in tools + MCP integration (HTTP + stdio transports)
+- 10 built-in tools + MCP integration (HTTP + stdio transports)
 - 7 built-in skills + 13 built-in workflows (user-extensible)
 - Sub-agents with lossless context inheritance (5 specialists + generic)
 - Client-server architecture with WebSocket transport + graceful reconnection
@@ -594,7 +600,7 @@ Use `./exe/anima` (not `bundle exec anima`) to test local code changes — the e
 ### Running Tests
 
 ```bash
-bundle exec rspec
+bundle exec rails test
 ```
 
 ## License
